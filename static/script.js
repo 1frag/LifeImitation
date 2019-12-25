@@ -19,6 +19,7 @@ window.onload = function () {
                 'DrawPlant': ifDrawPlant,
                 'DrawHerbivoreAnimal': isDrawHerbivoreAnimal,
                 'InfoAbout': isInfoAbout,
+                'MoveMe': isMoveMe,
             }[data['OnCmd']](data);
 
             if (!res) {
@@ -34,6 +35,27 @@ window.onload = function () {
     }
 };
 
+function _(op, a, b) {
+    if (op === 'A')
+        return parseInt(a.replace('px', '')) + b + 'px';
+    if (op === 'B'){
+        let pref = parseInt(a.replace('px', ''));
+        if (pref < 0) return '0px';
+        if (pref >= b) return b + 'px';
+        return a;
+    }
+}
+
+function isMoveMe(data) {
+    let ent = document.getElementById('_go_' + data['IdObj']);
+    if (ent === null) return false;
+    ent.style.left = _('A', ent.style.left, data['ChangeX']);
+    ent.style.top = _('A', ent.style.top, data['ChangeY']);
+    ent.style.left = _('B', ent.style.left, ah - 30);
+    ent.style.top = _('B', ent.style.top, aw - 30);
+    return true;
+}
+
 function isInfoAbout(data) {
     if (data['Class'] === 'Plant') {
         alert('Это растение');
@@ -47,30 +69,32 @@ function isInfoAbout(data) {
     }
 }
 
-function isDrawHerbivoreAnimal(data) {
-    let halimal = document.createElement('div');
-    halimal.className = 'entity';
-    main.insertBefore(halimal, null);
-    halimal.style.top = (data['Top'] * aw) + 'px';
-    halimal.style.left = (data['Left'] * ah) + 'px';
-    halimal.style.background = 'url(/static/imgs/hanimal.png)';
-    halimal.style['background-size'] = '100%';
-    halimal.__godata__ = {'id': data['Id']};
-    halimal.onclick = function () {
+function addEntity(data) {
+    let ent = document.createElement('div');
+    ent.id = '_go_' + data['Id'];
+    ent.className = 'entity';
+    main.insertBefore(ent, null);
+    ent.style.top = (data['Top'] * aw) + 'px';
+    ent.style.left = (data['Left'] * ah) + 'px';
+    ent.__godata__ = {'id': data['Id']};
+    ent.onclick = function () {
         conn.send(JSON.stringify({
             'Cmd': 'info',
             'Id': data['Id'],
         }))
     };
+    return ent
+}
+
+function isDrawHerbivoreAnimal(data) {
+    let halimal = addEntity(data);
+    halimal.style.background = 'url(/static/imgs/hanimal.png)';
+    halimal.style['background-size'] = '100%';
     return true;
 }
 
 function ifDrawPlant(data) {
-    let plant = document.createElement('div');
-    plant.className = 'entity';
-    main.insertBefore(plant, null);
-    plant.style.top = (data['Top'] * aw) + 'px';
-    plant.style.left = (data['Left'] * ah) + 'px';
+    let plant = addEntity(data);
     plant.style.background = {
         0: 'url(/static/imgs/plant_type1.png)',
         1: 'url(/static/imgs/plant_type2.png)',
@@ -79,14 +103,7 @@ function ifDrawPlant(data) {
         4: 'url(/static/imgs/plant_type5.png)',
         5: 'url(/static/imgs/plant_type6.png)',
     }[data['Type']];
-    plant.onclick = function () {
-        conn.send(JSON.stringify({
-            'Cmd': 'info',
-            'Id': data['Id'],
-        }))
-    };
     plant.style['background-size'] = '100%';
-    plant.__godata__ = {'id': data['Id']};
     return true;
 }
 

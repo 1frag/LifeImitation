@@ -13,6 +13,7 @@ html {
     width: 30px;
     position: absolute;
     background-size: 100%;
+    transition-duration: 600ms;
 }
 
 body {

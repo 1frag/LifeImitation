@@ -28,8 +28,9 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	conn *websocket.Conn
-	send chan []byte
+	conn  *websocket.Conn
+	send  chan []byte
+	lock sync.RWMutex
 }
 
 func (c *Client) readPump() {
@@ -90,7 +91,6 @@ func (c *Client) writePump() {
 				return
 			}
 
-			lock := sync.RWMutex{}
 			r := Request{}
 			err := json.Unmarshal(message, &r)
 
@@ -100,7 +100,7 @@ func (c *Client) writePump() {
 			}
 
 			processMessage(r, func(bytes []byte) {
-				lock.Lock()
+				c.lock.Lock()
 				w, err := c.conn.NextWriter(websocket.TextMessage)
 				if err != nil {
 					log.Printf("Не удалось получить writer: %q", err)
@@ -116,7 +116,7 @@ func (c *Client) writePump() {
 				if err := w.Close(); err != nil {
 					return
 				}
-				lock.Unlock()
+				c.lock.Unlock()
 			})
 		case <-ticker.C:
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -134,8 +134,13 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
-	client := &Client{conn: conn, send: make(chan []byte, 256)}
+	client := &Client{
+		conn: conn,
+		send: make(chan []byte, 256),
+		lock: sync.RWMutex{},
+	}
 
 	go client.writePump()
 	go client.readPump()
+	go client.MovingManager()
 }
