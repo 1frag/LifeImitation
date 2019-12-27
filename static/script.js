@@ -2,7 +2,12 @@ let conn, _data, main, aw, ah;
 window.onload = function () {
     main = document.getElementById('main');
     if (window["WebSocket"]) {
-        conn = new WebSocket("ws://" + document.location.host + "/ws");
+        let protocol = 'ws';
+        if (document.location.host.substr(0, 2) !== '0.') {
+            // probably Production
+            protocol += 's'
+        }
+        conn = new WebSocket(protocol + document.location.host + "/ws");
         conn.onclose = function (evt) {
             console.warn('Connection closed.');
         };
