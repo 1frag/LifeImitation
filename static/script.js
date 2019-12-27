@@ -7,7 +7,7 @@ window.onload = function () {
             // probably Production
             protocol += 's'
         }
-        conn = new WebSocket(protocol + document.location.host + "/ws");
+        conn = new WebSocket(protocol + '://' + document.location.host + "/ws");
         conn.onclose = function (evt) {
             console.warn('Connection closed.');
         };
