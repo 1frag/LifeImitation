@@ -1,5 +1,6 @@
 let conn, _data, main, aw, ah;
 window.onload = function () {
+    // todo: реализовать корректно закрытие вебсокета
     main = document.getElementById('main');
     if (window["WebSocket"]) {
         let protocol = 'ws';
@@ -27,6 +28,7 @@ window.onload = function () {
                 'InfoAbout': isInfoAbout,
                 'MoveMe': isMoveMe,
                 'MustDie': isMustDie,
+                'Bue': isBue,
             }[data['OnCmd']](data);
 
             if (!res) {
@@ -46,6 +48,11 @@ window.onload = function () {
         console.info('Your browser does not support WebSockets.');
     }
 };
+
+function isBue(data) {
+    alert(data['Reason']);
+    return true;
+}
 
 function isMustDie(data) {
     let ent = document.getElementById('_go_' + data['Id']);

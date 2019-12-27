@@ -28,9 +28,6 @@ func main() {
 	} else {
 		addr = "8888"
 	}
-	if os.Getenv("PRODUCTION") != "" {
-
-	}
 	fmt.Print(os.Getenv("PORT"))
 	flag.Parse()
 	fs := http.FileServer(http.Dir("static"))

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/gorilla/websocket"
 	"log"
 	"math"
 	"math/rand"
@@ -10,36 +9,36 @@ import (
 	"time"
 )
 
-type InitResponse struct {
-	Gap   [][]int
-	OnCmd Command
-}
+//type InitResponse struct {
+//	Gap   [][]int
+//	OnCmd Command
+//}
 
-func NewInitResponse() *InitResponse {
-	log.Printf("gap[%d][%d]", WIDTH, HEIGHT)
-	var resp = InitResponse{OnCmd: DrawMapCmd}
-	resp.Gap = make([][]int, HEIGHT)
-	for i := 0; i < HEIGHT; i++ {
-		resp.Gap[i] = make([]int, WIDTH)
-		for j := 0; j < WIDTH; j++ {
-			resp.Gap[i][j] = rand.Intn(1)
-		}
-	}
-	return &resp
-}
+//func NewInitResponse() *InitResponse {
+//	log.Printf("gap[%d][%d]", WIDTH, HEIGHT)
+//	var resp = InitResponse{OnCmd: DrawMapCmd}
+//	resp.Gap = make([][]int, HEIGHT)
+//	for i := 0; i < HEIGHT; i++ {
+//		resp.Gap[i] = make([]int, WIDTH)
+//		for j := 0; j < WIDTH; j++ {
+//			resp.Gap[i][j] = rand.Intn(1)
+//		}
+//	}
+//	return &resp
+//}
 
-func DrawMap(write func([]byte)) {
-	/* func to init gap with different colours */
-	/* todo: bonus */
-
-	var resp = NewInitResponse()
-	r, er := json.Marshal(resp)
-	if er != nil {
-		log.Printf("Возникли ошибки при маршалинге %q", er)
-		return
-	}
-	write(r)
-}
+//func DrawMap() {
+//	/* func to init gap with different colours */
+//	/* todo: bonus */
+//
+//	var resp = NewInitResponse()
+//	r, er := json.Marshal(resp)
+//	if er != nil {
+//		log.Printf("Возникли ошибки при маршалинге %q", er)
+//		return
+//	}
+//	write(r)
+//}
 
 var globId = 0
 var lockForId = sync.Mutex{}
@@ -51,7 +50,7 @@ func getNextId() int {
 	return globId
 }
 
-func addPlant(write func([]byte)) {
+func addPlant() {
 	pl := &Plant{
 		BaseEntity: BaseEntity{
 			Id:   getNextId(),
@@ -67,9 +66,9 @@ func addPlant(write func([]byte)) {
 	}
 }
 
-func GeneratePlants(write func([]byte)) {
+func GeneratePlants() {
 	for count := 10 + rand.Int()%15; count > 0; count-- {
-		addPlant(write)
+		addPlant()
 	}
 }
 
@@ -111,7 +110,7 @@ func (p *Plant) AsCmdToJs() []byte {
 	return data
 }
 
-func GenerateHerbivoreAnimal(write func([]byte)) {
+func GenerateHerbivoreAnimal() {
 	for count := 6 + rand.Int()%5; count > 0; count-- {
 		an := &HerbivoreAnimal{
 			BaseAnimal: BaseAnimal{
@@ -128,8 +127,8 @@ func GenerateHerbivoreAnimal(write func([]byte)) {
 		data := an.AsCmdToJs()
 		if data != nil {
 			write(data)
-			go an.MoveInTheBackground(write)
-			go an.StarveInTheBackground(write)
+			go an.MoveInTheBackground()
+			go an.StarveInTheBackground()
 		}
 	}
 }
@@ -154,7 +153,7 @@ type HerbivoreAnimal struct {
 	Target *Plant
 }
 
-func GetInfoAbout(write func([]byte), id int) {
+func GetInfoAbout(id int) {
 	if _, ok := StoragePlants[id]; ok {
 		type ResponsePlants struct {
 			OnCmd Command
@@ -215,7 +214,7 @@ func (p *HerbivoreAnimal) AsCmdToJs() []byte {
 	return data
 }
 
-func (p *BaseAnimal) StarveInTheBackground(write func([]byte)) {
+func (p *BaseAnimal) StarveInTheBackground() {
 	p.starvation = &ParallelizationMechanism{
 		ticker:  time.NewTicker(StarveProcessPeriod * time.Millisecond),
 		channel: make(chan bool),
@@ -248,7 +247,7 @@ func (p *BaseAnimal) StarveInTheBackground(write func([]byte)) {
 	}
 }
 
-func (p *BaseAnimal) MoveInTheBackground(write func([]byte)) {
+func (p *BaseAnimal) MoveInTheBackground() {
 	p.moving = &ParallelizationMechanism{
 		ticker:  time.NewTicker(MovingPeriod * time.Millisecond),
 		channel: make(chan bool),
@@ -528,7 +527,7 @@ func (p *PredatoryAnimal) AsCmdToJs() []byte {
 	return data
 }
 
-func GeneratePredatoryAnimal(write func([]byte)) {
+func GeneratePredatoryAnimal() {
 	for count := 1 + rand.Int()%2; count > 0; count-- {
 		an := &PredatoryAnimal{
 			BaseAnimal: BaseAnimal{
@@ -545,8 +544,8 @@ func GeneratePredatoryAnimal(write func([]byte)) {
 		data := an.AsCmdToJs()
 		if data != nil {
 			write(data)
-			go an.MoveInTheBackground(write)
-			go an.StarveInTheBackground(write)
+			go an.MoveInTheBackground()
+			go an.StarveInTheBackground()
 		}
 	}
 }
@@ -554,11 +553,7 @@ func GeneratePredatoryAnimal(write func([]byte)) {
 func (c *Client) PopulatePlants() {
 	for {
 		if len(StoragePlants) < 5 {
-			addPlant(func(b []byte) {
-				c.lock.Lock()
-				_ = c.conn.WriteMessage(websocket.TextMessage, b)
-				c.lock.Unlock()
-			})
+			addPlant()
 		}
 	}
 }
@@ -583,14 +578,16 @@ const (
 	KillCheckerPeriod   = 1000
 	StarveProcessPeriod = 1000
 
-	DrawMapCmd          Command = "DrawMapCmd"
+	//DrawMapCmd          Command = "DrawMapCmd"
 	DrawPlant           Command = "DrawPlant"
 	InfoAbout           Command = "InfoAbout"
 	DrawHerbivoreAnimal Command = "DrawHerbivoreAnimal"
 	MoveMe              Command = "MoveMe"
 	MustDie             Command = "MustDie"
 	DrawPredatoryAnimal Command = "DrawPredatoryAnimal"
+	Bue                 Command = "Bue"
 
-	Starvation Reason = "Умер от голода"
-	Eaten      Reason = "Его съели"
+	Starvation       Reason = "Умер от голода"
+	Eaten            Reason = "Его съели"
+	LimitConnections Reason = "Maximum concurrent connections exceeded"
 )

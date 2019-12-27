@@ -17,9 +17,6 @@ import (
 const (
 	pongWait   = 60 * time.Second
 	pingPeriod = (pongWait * 9) / 10
-
-	WIDTH  = 100
-	HEIGHT = 50
 )
 
 var upgrader = websocket.Upgrader{
@@ -28,9 +25,10 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	conn  *websocket.Conn
-	send  chan []byte
+	conn *websocket.Conn
+	send chan []byte
 	lock sync.RWMutex
+	die  chan bool
 }
 
 func (c *Client) readPump() {
@@ -42,7 +40,7 @@ func (c *Client) readPump() {
 	}()
 
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(pongWait));
+		_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
 	for {
@@ -57,16 +55,16 @@ func (c *Client) readPump() {
 	}
 }
 
-func processMessage(r Request, write func([]byte)) []byte {
+func processMessage(r Request) []byte {
 	switch r.Cmd {
 	case "init":
 		//go DrawMap(write) /*DrawMap*/
 	case "entity":
-		go GeneratePlants(write)          /*DrawPlant*/
-		go GenerateHerbivoreAnimal(write) /*GenerateHerbivoreAnimal*/
-		go GeneratePredatoryAnimal(write) /*_EMPTY_*/
+		go GeneratePlants()          /*DrawPlant*/
+		go GenerateHerbivoreAnimal() /*GenerateHerbivoreAnimal*/
+		go GeneratePredatoryAnimal() /*_EMPTY_*/
 	case "info":
-		go GetInfoAbout(write, r.Id) /*InfoAbout*/
+		go GetInfoAbout(r.Id) /*InfoAbout*/
 	}
 	return []byte("ERR")
 }
@@ -74,6 +72,24 @@ func processMessage(r Request, write func([]byte)) []byte {
 type Request struct {
 	Cmd string
 	Id  int
+}
+
+func write (bytes []byte) {
+	LastClient.lock.Lock()
+	w, err := LastClient.conn.NextWriter(websocket.TextMessage)
+	if err != nil {
+		log.Printf("Не удалось получить writer: %q", err)
+		return
+	}
+	_, err = w.Write(bytes)
+	if err != nil {
+		log.Printf("Произошел какой то ой %q, %s не отправлены",
+			err, string(bytes))
+	}
+	if err := w.Close(); err != nil {
+		return
+	}
+	LastClient.lock.Unlock()
 }
 
 func (c *Client) writePump() {
@@ -102,33 +118,15 @@ func (c *Client) writePump() {
 				return
 			}
 
-			processMessage(r, func(bytes []byte) {
-				c.lock.Lock()
-				w, err := c.conn.NextWriter(websocket.TextMessage)
-				if err != nil {
-					log.Printf("Не удалось получить writer: %q", err)
-					return
-				}
-				_, err = w.Write(bytes)
-				if err != nil {
-					log.Printf("Произошел какой то ой %q, %s не отправлены",
-						err, string(bytes))
-				} else {
-					//log.Printf("Байты успешно переданы %s", string(bytes))
-				}
-				if err := w.Close(); err != nil {
-					return
-				}
-				c.lock.Unlock()
-			})
-		case <-ticker.C:
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Printf("Произошел ой %q", err)
-				return
-			}
+			processMessage(r)
+		case <-c.die:
+			return
 		}
+
 	}
 }
+
+var LastClient *Client
 
 func serveWs(w http.ResponseWriter, r *http.Request) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -139,9 +137,18 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	}
 	client := &Client{
 		conn: conn,
+		die:  make(chan bool),
 		send: make(chan []byte, 256),
 		lock: sync.RWMutex{},
 	}
+
+	if LastClient != nil {
+		LastClient.lock.Lock()
+		_ = LastClient.conn.WriteMessage(websocket.TextMessage, BueMessage)
+		_ = LastClient.conn.Close()
+		LastClient.lock.Unlock()
+	}
+	LastClient = client
 
 	go client.writePump()
 	go client.readPump()
@@ -149,3 +156,16 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	go client.KillerManager()
 	go client.PopulatePlants()
 }
+
+/* Unfortunately now we support not more than one opening connection.
+The latest connection will be alive. Others should receive this error message
+*/
+type CmdBue struct {
+	OnCmd  Command
+	Reason Reason
+}
+
+var BueMessage, _ = json.Marshal(CmdBue{
+	OnCmd:  Bue,
+	Reason: LimitConnections,
+})
