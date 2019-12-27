@@ -131,6 +131,10 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		LastClient.lock.Lock()
 		_ = LastClient.conn.WriteMessage(websocket.TextMessage, BueMessage)
 		_ = LastClient.conn.Close()
+		LastClient.die <-true
+		StoragePlants = make(map[int]*Plant)
+		StorageHerbivoreAnimal = make(map[int]*HerbivoreAnimal)
+		StoragePredatoryAnimal = make(map[int]*PredatoryAnimal)
 		LastClient.lock.Unlock()
 	}
 	LastClient = client
