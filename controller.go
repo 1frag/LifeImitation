@@ -2,23 +2,22 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/gorilla/websocket"
 	"log"
 	"math"
 	"math/rand"
 	"sync"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 type InitResponse struct {
 	Gap   [][]int
-	OnCmd string
+	OnCmd Command
 }
 
 func NewInitResponse() *InitResponse {
 	log.Printf("gap[%d][%d]", WIDTH, HEIGHT)
-	var resp = InitResponse{OnCmd: "DrawMap"}
+	var resp = InitResponse{OnCmd: DrawMapCmd}
 	resp.Gap = make([][]int, HEIGHT)
 	for i := 0; i < HEIGHT; i++ {
 		resp.Gap[i] = make([]int, WIDTH)
@@ -47,38 +46,41 @@ var lockForId = sync.Mutex{}
 
 func getNextId() int {
 	lockForId.Lock()
-	log.Print(globId)
 	defer lockForId.Unlock()
 	globId++
 	return globId
 }
 
-func GeneratePlants(write func([]byte)) {
-
-	for count := 10 + rand.Int()%15; count > 0; count-- {
-		pl := Plant{
-			BaseEntity: BaseEntity{
-				Id:   getNextId(),
-				Top:  rand.Float64(),
-				Left: rand.Float64(),
-			},
-			Type: rand.Intn(6),
-		}
-		StoragePlants[pl.Id] = pl
-		data := pl.AsCmdToJs()
-		if data != nil {
-			write(data)
-		}
+func addPlant(write func([]byte)) {
+	pl := &Plant{
+		BaseEntity: BaseEntity{
+			Id:   getNextId(),
+			Top:  rand.Intn(AllHeight),
+			Left: rand.Intn(AllWidth),
+		},
+		Type: rand.Intn(6),
+	}
+	StoragePlants[pl.Id] = pl
+	data := pl.AsCmdToJs()
+	if data != nil {
+		write(data)
 	}
 }
 
-var StoragePlants = make(map[int]Plant)
-var StorageHerbivoreAnimal = make(map[int]HerbivoreAnimal)
+func GeneratePlants(write func([]byte)) {
+	for count := 10 + rand.Int()%15; count > 0; count-- {
+		addPlant(write)
+	}
+}
+
+var StoragePlants = make(map[int]*Plant)
+var StorageHerbivoreAnimal = make(map[int]*HerbivoreAnimal)
+var StoragePredatoryAnimal = make(map[int]*PredatoryAnimal)
 
 type BaseEntity struct {
 	Id   int
-	Top  float64
-	Left float64
+	Top  int
+	Left int
 }
 
 type Plant struct {
@@ -88,15 +90,15 @@ type Plant struct {
 
 func (p *Plant) AsCmdToJs() []byte {
 	type RespDrawPlant struct {
-		OnCmd string
-		Top   float64
-		Left  float64
+		OnCmd Command
+		Top   int
+		Left  int
 		Type  int
 		Id    int
 	}
 
 	data, err := json.Marshal(RespDrawPlant{
-		OnCmd: "DrawPlant",
+		OnCmd: DrawPlant,
 		Top:   p.Top,
 		Left:  p.Left,
 		Type:  p.Type,
@@ -111,12 +113,12 @@ func (p *Plant) AsCmdToJs() []byte {
 
 func GenerateHerbivoreAnimal(write func([]byte)) {
 	for count := 6 + rand.Int()%5; count > 0; count-- {
-		an := HerbivoreAnimal{
+		an := &HerbivoreAnimal{
 			BaseAnimal: BaseAnimal{
 				BaseEntity: BaseEntity{
 					Id:   getNextId(),
-					Top:  rand.Float64(),
-					Left: rand.Float64(),
+					Top:  rand.Intn(AllHeight),
+					Left: rand.Intn(AllWidth),
 				},
 				Hunger: 0,
 			},
@@ -155,12 +157,12 @@ type HerbivoreAnimal struct {
 func GetInfoAbout(write func([]byte), id int) {
 	if _, ok := StoragePlants[id]; ok {
 		type ResponsePlants struct {
-			OnCmd string
+			OnCmd Command
 			Class string
 		}
 		js, err := json.Marshal(ResponsePlants{
 			Class: "Plant",
-			OnCmd: "InfoAbout",
+			OnCmd: InfoAbout,
 		})
 		if err != nil {
 			log.Print(err)
@@ -171,7 +173,7 @@ func GetInfoAbout(write func([]byte), id int) {
 	}
 	if data, ok := StorageHerbivoreAnimal[id]; ok {
 		type ResponsePlants struct {
-			OnCmd  string
+			OnCmd  Command
 			Class  string
 			Hunger int
 			Target *Plant
@@ -180,7 +182,7 @@ func GetInfoAbout(write func([]byte), id int) {
 			Class:  "ResponsePlants",
 			Hunger: data.Hunger,
 			Target: data.Target,
-			OnCmd:  "InfoAbout",
+			OnCmd:  InfoAbout,
 		})
 		if err != nil {
 			log.Print(err)
@@ -194,14 +196,14 @@ func GetInfoAbout(write func([]byte), id int) {
 
 func (p *HerbivoreAnimal) AsCmdToJs() []byte {
 	type RespDrawHerbivoreAnimal struct {
-		OnCmd string
-		Top   float64
-		Left  float64
+		OnCmd Command
+		Top   int
+		Left  int
 		Id    int
 	}
 
 	data, err := json.Marshal(RespDrawHerbivoreAnimal{
-		OnCmd: "DrawHerbivoreAnimal",
+		OnCmd: DrawHerbivoreAnimal,
 		Top:   p.Top,
 		Left:  p.Left,
 		Id:    p.Id,
@@ -213,9 +215,9 @@ func (p *HerbivoreAnimal) AsCmdToJs() []byte {
 	return data
 }
 
-func (p *HerbivoreAnimal) StarveInTheBackground(write func([]byte)) {
+func (p *BaseAnimal) StarveInTheBackground(write func([]byte)) {
 	p.starvation = &ParallelizationMechanism{
-		ticker:  time.NewTicker(500 * time.Millisecond),
+		ticker:  time.NewTicker(StarveProcessPeriod * time.Millisecond),
 		channel: make(chan bool),
 	}
 
@@ -224,17 +226,17 @@ func (p *HerbivoreAnimal) StarveInTheBackground(write func([]byte)) {
 		case <-p.starvation.channel:
 			return
 		case _ = <-p.starvation.ticker.C:
-			//p.Hunger++
+			p.Hunger++
 			if p.Hunger == 100 {
 				// Не сумел найти себе еду! - умираешь
 				js, err := json.Marshal(&struct {
-					OnCmd  string
+					OnCmd  Command
 					Id     int
-					Reason string
+					Reason Reason
 				}{
-					OnCmd:  "MustDie",
+					OnCmd:  MustDie,
 					Id:     p.Id,
-					Reason: "Умер от голода",
+					Reason: Starvation,
 				})
 				if err != nil {
 					log.Print(err)
@@ -246,9 +248,9 @@ func (p *HerbivoreAnimal) StarveInTheBackground(write func([]byte)) {
 	}
 }
 
-func (p *HerbivoreAnimal) MoveInTheBackground(write func([]byte)) {
+func (p *BaseAnimal) MoveInTheBackground(write func([]byte)) {
 	p.moving = &ParallelizationMechanism{
-		ticker:  time.NewTicker(500 * time.Millisecond),
+		ticker:  time.NewTicker(MovingPeriod * time.Millisecond),
 		channel: make(chan bool),
 	}
 
@@ -289,6 +291,12 @@ func (c *Client) MovingManager() {
 				Targeting: "Plant",
 			}
 		}
+		if data, ok := StoragePredatoryAnimal[id]; ok {
+			return &HunterInfomation{
+				Obj:       &data.BaseAnimal,
+				Targeting: "Herbivore",
+			}
+		}
 		log.Printf("Не могу найти по id=%d животного", id)
 		return nil
 	}
@@ -309,28 +317,20 @@ func (c *Client) MovingManager() {
 				return false
 			}
 			duration--
-			data, err := json.Marshal(struct {
-				OnCmd    string
+			c.lock.Lock()
+			c.conn.WriteJSON(struct {
+				OnCmd    Command
 				Strategy int
 				ChangeX  int
 				ChangeY  int
 				IdObj    int
 			}{
-				OnCmd:    "MoveMe",
+				OnCmd:    MoveMe,
 				Strategy: 0,
 				ChangeX:  dirX,
 				ChangeY:  dirY,
 				IdObj:    id,
 			})
-			if err != nil {
-				log.Print(err)
-			}
-			c.lock.Lock()
-			w, err := c.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				return false
-			}
-			_, _ = w.Write(data)
 			c.lock.Unlock()
 			return true
 		}
@@ -345,24 +345,37 @@ func (c *Client) MovingManager() {
 		t, o := h.Targeting, h.Obj
 		if t == "Plant" {
 			var val float64 = 1
-			var mostSuitable *int
-			for id, data := range StoragePlants {
+			for _, data := range StoragePlants {
 				if dist := func() float64 {
-					return - math.Sqrt(math.Pow(data.Left-o.Left, 2) +
-						math.Pow(data.Top-o.Top, 2))
+					return - math.Sqrt(math.Pow(float64(data.Left-o.Left), 2) +
+						math.Pow(float64(data.Top-o.Top), 2))
 				}(); dist < val {
 					val = dist
-					mostSuitable = &id
-				}
-			}
-			var _ok_ = false
-			if mostSuitable != nil {
-				if data, ok := StoragePlants[*mostSuitable]; ok {
 					o.Target = &data.BaseEntity
-					_ok_ = ok
 				}
 			}
-			if _ok_ {
+			if o.Target == nil {
+				log.Printf("o target всё еще nil")
+				// Кушать нечего - паниковать!
+				_memory[id] = struct {
+					Type  int
+					Value func() bool
+				}{Type: -1, Value: func() bool { return false }}
+				return
+			}
+		} else if t == "Herbivore" {
+			var val float64 = 1
+			for _, data := range StorageHerbivoreAnimal {
+				if dist := func() float64 {
+					return - math.Sqrt(math.Pow(float64(data.Left-o.Left), 2) +
+						math.Pow(float64(data.Top-o.Top), 2))
+				}(); dist < val {
+					val = dist
+					o.Target = &data.BaseEntity
+				}
+			}
+			if o.Target == nil {
+				log.Printf("o target всё еще nil")
 				// Кушать нечего - паниковать!
 				_memory[id] = struct {
 					Type  int
@@ -371,11 +384,11 @@ func (c *Client) MovingManager() {
 				return
 			}
 		}
-		var getStep = func(from float64, to float64) int {
-			if from > to {
-				return rand.Intn(10) + 10
+		var getStep = func(from int, to int) int {
+			if from < to {
+				return rand.Intn(5) + 2
 			} else {
-				return -(rand.Intn(10) + 10)
+				return -(rand.Intn(5) + 2)
 			}
 		}
 
@@ -386,23 +399,28 @@ func (c *Client) MovingManager() {
 			if o.Target == nil {
 				return false
 			}
-			data, err := json.Marshal(struct {
-				OnCmd    string
+			if _, ok := StoragePlants[o.Target.Id]; !ok {
+				return false
+			}
+			dx := getStep(o.Left, o.Target.Left)
+			dy := getStep(o.Top, o.Target.Top)
+			o.Left += dx
+			o.Top += dy
+			c.lock.Lock()
+			c.conn.WriteJSON(struct {
+				OnCmd    Command
 				Strategy int
 				ChangeX  int
 				ChangeY  int
 				IdObj    int
 			}{
-				OnCmd:    "MoveMe",
+				OnCmd:    MoveMe,
 				Strategy: 1,
-				ChangeX:  getStep(o.Left, o.Target.Left),
-				ChangeY:  getStep(o.Left, o.Target.Left),
+				ChangeX:  dx,
+				ChangeY:  dy,
 				IdObj:    id,
 			})
-			if err != nil {
-				log.Print(err)
-			}
-			c.send <- data
+			c.lock.Unlock()
 			return true
 		}}
 	}
@@ -440,3 +458,139 @@ func (c *Client) MovingManager() {
 		}
 	}
 }
+
+func (c *Client) KillerManager() {
+	p := &ParallelizationMechanism{
+		ticker:  time.NewTicker(KillCheckerPeriod * time.Millisecond),
+		channel: make(chan bool),
+	}
+
+	for {
+		select {
+		case <-p.channel:
+			return
+		case _ = <-p.ticker.C:
+			/* Травоядные животные и растения */
+			for _, animal := range StorageHerbivoreAnimal {
+				for id, plant := range StoragePlants {
+					if meet := func(abl int, abt int, bbl int, bbt int) bool {
+						in := func(a int, b int, c int) bool {
+							return (a <= b) && (b <= c)
+						}
+						two := func(a int, b int, c int) bool {
+							return in(a, b, a+c) || in(b, a, b+c)
+						}
+						return two(abl, bbl, EntityWidth) && two(abt, bbt, EntityHeight)
+					}(animal.Left, animal.Top, plant.Left, plant.Top); meet {
+						c.lock.Lock()
+						c.conn.WriteJSON(struct {
+							OnCmd  Command
+							Id     int
+							Reason Reason
+						}{
+							OnCmd:  MustDie,
+							Id:     id,
+							Reason: Eaten,
+						})
+						c.lock.Unlock()
+						delete(StoragePlants, id)
+						animal.Hunger -= 20
+					}
+				}
+			}
+		}
+	}
+}
+
+type PredatoryAnimal struct {
+	BaseAnimal
+	Target *HerbivoreAnimal
+}
+
+func (p *PredatoryAnimal) AsCmdToJs() []byte {
+	type RespDrawPredatoryAnimal struct {
+		OnCmd Command
+		Top   int
+		Left  int
+		Id    int
+	}
+
+	data, err := json.Marshal(RespDrawPredatoryAnimal{
+		OnCmd: DrawPredatoryAnimal,
+		Top:   p.Top,
+		Left:  p.Left,
+		Id:    p.Id,
+	})
+	if err != nil {
+		log.Printf("Ошибка при маршале %q", err)
+		return nil
+	}
+	return data
+}
+
+func GeneratePredatoryAnimal(write func([]byte)) {
+	for count := 1 + rand.Int()%2; count > 0; count-- {
+		an := &PredatoryAnimal{
+			BaseAnimal: BaseAnimal{
+				BaseEntity: BaseEntity{
+					Id:   getNextId(),
+					Top:  rand.Intn(AllHeight),
+					Left: rand.Intn(AllWidth),
+				},
+				Hunger: 0,
+			},
+			Target: nil,
+		}
+		StoragePredatoryAnimal[an.Id] = an
+		data := an.AsCmdToJs()
+		if data != nil {
+			write(data)
+			go an.MoveInTheBackground(write)
+			go an.StarveInTheBackground(write)
+		}
+	}
+}
+
+func (c *Client) PopulatePlants() {
+	for {
+		if len(StoragePlants) < 5 {
+			addPlant(func(b []byte) {
+				c.lock.Lock()
+				_ = c.conn.WriteMessage(websocket.TextMessage, b)
+				c.lock.Unlock()
+			})
+		}
+	}
+}
+
+type Command string
+type Reason string
+
+const (
+	CountX = 100
+	CountY = 50
+
+	PanelWidth  = 10
+	PanelHeight = 10
+
+	EntityWidth  = 30
+	EntityHeight = 30
+
+	AllWidth  = CountX*PanelWidth - EntityWidth
+	AllHeight = CountY*PanelHeight - EntityHeight
+
+	MovingPeriod        = 1000
+	KillCheckerPeriod   = 1000
+	StarveProcessPeriod = 1000
+
+	DrawMapCmd          Command = "DrawMapCmd"
+	DrawPlant           Command = "DrawPlant"
+	InfoAbout           Command = "InfoAbout"
+	DrawHerbivoreAnimal Command = "DrawHerbivoreAnimal"
+	MoveMe              Command = "MoveMe"
+	MustDie             Command = "MustDie"
+	DrawPredatoryAnimal Command = "DrawPredatoryAnimal"
+
+	Starvation Reason = "Умер от голода"
+	Eaten      Reason = "Его съели"
+)

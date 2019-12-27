@@ -41,7 +41,10 @@ func (c *Client) readPump() {
 		}
 	}()
 
-	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongWait));
+		return nil
+	})
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
@@ -50,7 +53,6 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		log.Printf("Was sent: %s", message)
 		c.send <- message
 	}
 }
@@ -58,10 +60,11 @@ func (c *Client) readPump() {
 func processMessage(r Request, write func([]byte)) []byte {
 	switch r.Cmd {
 	case "init":
-		go DrawMap(write) /*DrawMap*/
+		//go DrawMap(write) /*DrawMap*/
 	case "entity":
 		go GeneratePlants(write)          /*DrawPlant*/
 		go GenerateHerbivoreAnimal(write) /*GenerateHerbivoreAnimal*/
+		go GeneratePredatoryAnimal(write) /*_EMPTY_*/
 	case "info":
 		go GetInfoAbout(write, r.Id) /*InfoAbout*/
 	}
@@ -111,7 +114,7 @@ func (c *Client) writePump() {
 					log.Printf("Произошел какой то ой %q, %s не отправлены",
 						err, string(bytes))
 				} else {
-					log.Printf("Байты успешно переданы %s", string(bytes))
+					//log.Printf("Байты успешно переданы %s", string(bytes))
 				}
 				if err := w.Close(); err != nil {
 					return
@@ -143,4 +146,6 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	go client.writePump()
 	go client.readPump()
 	go client.MovingManager()
+	go client.KillerManager()
+	go client.PopulatePlants()
 }

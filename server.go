@@ -2,11 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
-
-var addr = flag.String("addr", ":8080", "http service address")
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
 	log.Println(r.URL)
@@ -22,6 +22,13 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	var addr string
+	if os.Getenv("PORT") != "" {
+		addr = os.Getenv("PORT")
+	} else {
+		addr = "8888"
+	}
+	fmt.Print(os.Getenv("PORT"))
 	flag.Parse()
 	fs := http.FileServer(http.Dir("static"))
 
@@ -29,7 +36,7 @@ func main() {
 	http.HandleFunc("/ws", serveWs)
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
-	err := http.ListenAndServe(*addr, nil)
+	err := http.ListenAndServe(":" + addr, nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
