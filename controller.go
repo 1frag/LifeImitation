@@ -133,19 +133,10 @@ func GenerateHerbivoreAnimal() {
 	}
 }
 
-type ParallelizationMechanism struct {
-	/* Механизм распараллеливания функций для
-	выполнения в задач фоне*/
-	ticker  *time.Ticker
-	channel chan bool
-}
-
 type BaseAnimal struct {
 	BaseEntity
-	Hunger     int /*На сколько сильно голоден из 100. если 100 умирает*/
-	Target     *BaseEntity
-	moving     *ParallelizationMechanism
-	starvation *ParallelizationMechanism
+	Hunger int /*На сколько сильно голоден из 100. если 100 умирает*/
+	Target *BaseEntity
 }
 
 type HerbivoreAnimal struct {
@@ -215,16 +206,13 @@ func (p *HerbivoreAnimal) AsCmdToJs() []byte {
 }
 
 func (p *BaseAnimal) StarveInTheBackground() {
-	p.starvation = &ParallelizationMechanism{
-		ticker:  time.NewTicker(StarveProcessPeriod * time.Millisecond),
-		channel: make(chan bool),
-	}
+	ticker := time.NewTicker(StarveProcessPeriod)
 
 	for {
 		select {
-		case <-p.starvation.channel:
+		case <-LastClient.die:
 			return
-		case _ = <-p.starvation.ticker.C:
+		case <-ticker.C:
 			p.Hunger++
 			if p.Hunger == 100 {
 				// Не сумел найти себе еду! - умираешь
@@ -248,16 +236,13 @@ func (p *BaseAnimal) StarveInTheBackground() {
 }
 
 func (p *BaseAnimal) MoveInTheBackground() {
-	p.moving = &ParallelizationMechanism{
-		ticker:  time.NewTicker(MovingPeriod * time.Millisecond),
-		channel: make(chan bool),
-	}
+	ticker := time.NewTicker(MovingPeriod)
 
 	for {
 		select {
-		case <-p.moving.channel:
+		case <-LastClient.die:
 			return
-		case _ = <-p.moving.ticker.C:
+		case <-ticker.C:
 			movingChannel <- p.Id
 		}
 	}
@@ -454,21 +439,20 @@ func (c *Client) MovingManager() {
 			} else {
 				log.Printf("id=%d не хочет ходить", id)
 			}
+		case <-c.die:
+			return
 		}
 	}
 }
 
 func (c *Client) KillerManager() {
-	p := &ParallelizationMechanism{
-		ticker:  time.NewTicker(KillCheckerPeriod * time.Millisecond),
-		channel: make(chan bool),
-	}
+	ticker := time.NewTicker(KillCheckerPeriod)
 
 	for {
 		select {
-		case <-p.channel:
+		case <-c.die:
 			return
-		case _ = <-p.ticker.C:
+		case <-ticker.C:
 			/* Травоядные животные и растения */
 			for _, animal := range StorageHerbivoreAnimal {
 				for id, plant := range StoragePlants {
@@ -555,6 +539,10 @@ func (c *Client) PopulatePlants() {
 		if len(StoragePlants) < 5 {
 			addPlant()
 		}
+		select {
+		case <-c.die:
+			return
+		}
 	}
 }
 
@@ -574,9 +562,9 @@ const (
 	AllWidth  = CountX*PanelWidth - EntityWidth
 	AllHeight = CountY*PanelHeight - EntityHeight
 
-	MovingPeriod        = 1000
-	KillCheckerPeriod   = 1000
-	StarveProcessPeriod = 1000
+	MovingPeriod        = 1000 * time.Millisecond
+	KillCheckerPeriod   = 1000 * time.Millisecond
+	StarveProcessPeriod = 1000 * time.Millisecond
 
 	//DrawMapCmd          Command = "DrawMapCmd"
 	DrawPlant           Command = "DrawPlant"

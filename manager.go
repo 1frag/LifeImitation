@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	pongWait   = 60 * time.Second
-	pingPeriod = (pongWait * 9) / 10
+	pongWait = 60 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -32,13 +31,6 @@ type Client struct {
 }
 
 func (c *Client) readPump() {
-	defer func() {
-		err := c.conn.Close()
-		if err != nil {
-			log.Printf("Ошибка завершения %q", err)
-		}
-	}()
-
 	c.conn.SetPongHandler(func(string) error {
 		_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
@@ -52,6 +44,10 @@ func (c *Client) readPump() {
 			break
 		}
 		c.send <- message
+		select {
+		case <-c.die:
+			return
+		}
 	}
 }
 
@@ -74,7 +70,7 @@ type Request struct {
 	Id  int
 }
 
-func write (bytes []byte) {
+func write(bytes []byte) {
 	LastClient.lock.Lock()
 	w, err := LastClient.conn.NextWriter(websocket.TextMessage)
 	if err != nil {
@@ -93,20 +89,10 @@ func write (bytes []byte) {
 }
 
 func (c *Client) writePump() {
-	ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		ticker.Stop()
-		err := c.conn.Close()
-		if err != nil {
-			log.Printf("Ошибка завершения в writePump %q", err)
-		}
-	}()
 	for {
 		select {
 		case message, ok := <-c.send:
 			if !ok {
-				err := c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				log.Printf("Ошибка ошибки %q", err)
 				return
 			}
 
@@ -122,7 +108,6 @@ func (c *Client) writePump() {
 		case <-c.die:
 			return
 		}
-
 	}
 }
 
