@@ -43,6 +43,9 @@ func (c *Client) readPump() {
 			}
 			break
 		}
+		if message == nil {
+			continue
+		}
 		log.Print(message)
 		c.send <- message
 		select {

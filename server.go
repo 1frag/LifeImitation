@@ -34,6 +34,7 @@ func main() {
 
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/ws", serveWs)
+	http.HandleFunc("/_debug", ServeDebug)
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	err := http.ListenAndServe(":" + addr, nil)

@@ -2,6 +2,19 @@ html {
     overflow: hidden;
 }
 
+:root {
+    --set-border-entity: 1px;
+}
+
+#settings {
+    width: 300px;
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    border: black 1px solid;
+}
+
 #main {
     position: absolute;
 }
@@ -11,6 +24,7 @@ html {
     display: block;
     height: 30px;
     width: 30px;
+    border: black solid var(--set-border-entity);
     position: absolute;
     background-size: 100%;
     transition-duration: 1500ms;

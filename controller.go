@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -72,9 +73,72 @@ func GeneratePlants() {
 	}
 }
 
-var StoragePlants = make(map[int]*Plant)
-var StorageHerbivoreAnimal = make(map[int]*HerbivoreAnimal)
-var StoragePredatoryAnimal = make(map[int]*PredatoryAnimal)
+var StoragePlants MapOfPlants = make(map[int]*Plant)
+var StorageHerbivoreAnimal MapOfHAnimal = make(map[int]*HerbivoreAnimal)
+var StoragePredatoryAnimal MapOfPAnimal = make(map[int]*PredatoryAnimal)
+
+type MapOfPlants map[int]*Plant
+type MapOfHAnimal map[int]*HerbivoreAnimal
+type MapOfPAnimal map[int]*PredatoryAnimal
+type MapOfBEntity map[int]*BaseEntity
+
+// todo: how to fix this shit?
+func (s *MapOfPlants) getBaseEntity() (r MapOfBEntity) {
+	r = make(map[int]*BaseEntity)
+	for i, e := range *s {
+		r[i] = &e.BaseEntity
+	}
+	return
+}
+
+func (s *MapOfHAnimal) getBaseEntity() (r MapOfBEntity) {
+	r = make(map[int]*BaseEntity)
+	for i, e := range *s {
+		r[i] = &e.BaseEntity
+	}
+	return
+}
+
+func (s *MapOfPAnimal) getBaseEntity() (r MapOfBEntity) {
+	r = make(map[int]*BaseEntity)
+	for i, e := range *s {
+		r[i] = &e.BaseEntity
+	}
+	return
+}
+
+func getEntity(id int) *BaseEntity {
+	if o, ok := StoragePredatoryAnimal[id]; ok {
+		return &o.BaseEntity
+	}
+	if o, ok := StorageHerbivoreAnimal[id]; ok {
+		return &o.BaseEntity
+	}
+	if o, ok := StoragePlants[id]; ok {
+		return &o.BaseEntity
+	}
+	return nil
+}
+
+//func StorageConvert(i interface{}) map[int]*BaseEntity {
+//	listSlice, ok := i.(*map[interface{}]interface{})
+//	if !ok {
+//		log.Print("<>ASAKLS")
+//		return nil
+//	}
+//	retval := make(map[int]*BaseEntity)
+//	for id_, v := range *listSlice {
+//		item, ok := v.(*BaseEntity)
+//		if !ok {
+//			log.Print("asdasdas")
+//			return nil
+//		}
+//		if id, ok := id_.(int); ok {
+//			retval[id] = item
+//		}
+//	}
+//	return retval
+//}
 
 type BaseEntity struct {
 	Id   int
@@ -125,10 +189,14 @@ func GenerateHerbivoreAnimal() {
 		}
 		StorageHerbivoreAnimal[an.Id] = an
 		data := an.AsCmdToJs()
+		exist := func() bool {
+			_, ok := StorageHerbivoreAnimal[an.Id]
+			return ok
+		}
 		if data != nil {
 			write(data)
-			go an.MoveInTheBackground()
-			go an.StarveInTheBackground()
+			go an.MoveInTheBackground(exist)
+			go an.StarveInTheBackground(exist)
 		}
 	}
 }
@@ -142,6 +210,20 @@ type BaseAnimal struct {
 type HerbivoreAnimal struct {
 	BaseAnimal
 	Target *Plant
+}
+
+func ServeDebug(w http.ResponseWriter, r *http.Request) {
+	/* Returns all objects in runtime now */
+	d, _ := json.Marshal(struct {
+		Plants  MapOfPlants
+		HAnimal MapOfHAnimal
+		PAnimal MapOfPAnimal
+	}{
+		Plants:  StoragePlants,
+		HAnimal: StorageHerbivoreAnimal,
+		PAnimal: StoragePredatoryAnimal,
+	})
+	_, _ = w.Write(d)
 }
 
 func GetInfoAbout(id int) {
@@ -169,7 +251,27 @@ func GetInfoAbout(id int) {
 			Target *Plant
 		}
 		js, err := json.Marshal(ResponsePlants{
-			Class:  "ResponsePlants",
+			Class:  "HerbivoreAnimal",
+			Hunger: data.Hunger,
+			Target: data.Target,
+			OnCmd:  InfoAbout,
+		})
+		if err != nil {
+			log.Print(err)
+			return
+		}
+		write(js)
+		return
+	}
+	if data, ok := StoragePredatoryAnimal[id]; ok {
+		type ResponsePlants struct {
+			OnCmd  Command
+			Class  string
+			Hunger int
+			Target *HerbivoreAnimal
+		}
+		js, err := json.Marshal(ResponsePlants{
+			Class:  "PredatoryAnimal",
 			Hunger: data.Hunger,
 			Target: data.Target,
 			OnCmd:  InfoAbout,
@@ -205,10 +307,13 @@ func (p *HerbivoreAnimal) AsCmdToJs() []byte {
 	return data
 }
 
-func (p *BaseAnimal) StarveInTheBackground() {
+func (p *BaseAnimal) StarveInTheBackground(exist func() bool) {
 	ticker := time.NewTicker(StarveProcessPeriod)
 
 	for {
+		if !exist() {
+			return
+		}
 		select {
 		case <-LastClient.die:
 			log.Print("StarveInTheBackground has been closed")
@@ -236,7 +341,7 @@ func (p *BaseAnimal) StarveInTheBackground() {
 	}
 }
 
-func (p *BaseAnimal) MoveInTheBackground() {
+func (p *BaseAnimal) MoveInTheBackground(exist func() bool) {
 	ticker := time.NewTicker(MovingPeriod)
 
 	for {
@@ -246,6 +351,9 @@ func (p *BaseAnimal) MoveInTheBackground() {
 			return
 		case <-ticker.C:
 			movingChannel <- p.Id
+		}
+		if !exist() {
+			return
 		}
 	}
 }
@@ -303,6 +411,9 @@ func (c *Client) MovingManager() {
 				return false
 			}
 			duration--
+			o := getEntity(id)
+			o.Left += dirX
+			o.Top += dirY
 			c.lock.Lock()
 			c.conn.WriteJSON(struct {
 				OnCmd    Command
@@ -317,6 +428,7 @@ func (c *Client) MovingManager() {
 				ChangeY:  dirY,
 				IdObj:    id,
 			})
+
 			c.lock.Unlock()
 			return true
 		}
@@ -328,7 +440,11 @@ func (c *Client) MovingManager() {
 
 	var initHunt = func(id int) {
 		h := getHunter(id)
+		if h == nil {
+			return
+		}
 		t, o := h.Targeting, h.Obj
+		var checkFunc func() bool
 		if t == "Plant" {
 			var val float64 = 1
 			for _, data := range StoragePlants {
@@ -348,6 +464,10 @@ func (c *Client) MovingManager() {
 					Value func() bool
 				}{Type: -1, Value: func() bool { return false }}
 				return
+			}
+			checkFunc = func() bool {
+				_, ok := StoragePlants[o.Target.Id]
+				return ok
 			}
 		} else if t == "Herbivore" {
 			var val float64 = 1
@@ -369,6 +489,10 @@ func (c *Client) MovingManager() {
 				}{Type: -1, Value: func() bool { return false }}
 				return
 			}
+			checkFunc = func() bool {
+				_, ok := StorageHerbivoreAnimal[o.Target.Id]
+				return ok
+			}
 		}
 		var getStep = func(from int, to int) int {
 			if from < to {
@@ -385,7 +509,7 @@ func (c *Client) MovingManager() {
 			if o.Target == nil {
 				return false
 			}
-			if _, ok := StoragePlants[o.Target.Id]; !ok {
+			if !checkFunc() {
 				return false
 			}
 			dx := getStep(o.Left, o.Target.Left)
@@ -414,7 +538,11 @@ func (c *Client) MovingManager() {
 	for {
 		select {
 		case id := <-movingChannel:
-			if obj := getHunter(id).Obj; obj != nil {
+			obj_ := getHunter(id)
+			if obj_ == nil {
+				return
+			}
+			if obj := obj_.Obj; obj != nil {
 				strategy := getStrategy(obj)
 				var doStep = false
 				if data, ok := _memory[id]; ok {
@@ -453,6 +581,44 @@ func (c *Client) MovingManager() {
 func (c *Client) KillerManager() {
 	ticker := time.NewTicker(KillCheckerPeriod)
 
+	var areMet = func(e1l int, e1t int, e2l int, e2t int) bool {
+		in := func(a int, b int, c int) bool {
+			return (a <= b) && (b <= c)
+		}
+		two := func(a int, b int, c int) bool {
+			return in(a, b, a+c) || in(b, a, b+c)
+		}
+		return two(e1l, e2l, EntityWidth) && two(e1t, e2t, EntityHeight)
+	}
+
+	var forr = func(power MapOfBEntity, weak MapOfBEntity,
+		onMet func(int, int)) {
+		if power == nil || weak == nil {
+			log.Print("Bad calling `forr` function")
+			return
+		}
+		for id1, e1 := range power {
+			for id2, e2 := range weak {
+				if !areMet(e1.Left, e1.Top, e2.Left, e2.Top) {
+					continue
+				}
+				log.Printf("1l=%d 1t=%d 2l=%d 2t=%d", e1.Left, e1.Top, e2.Left, e2.Top)
+				c.lock.Lock()
+				c.conn.WriteJSON(struct {
+					OnCmd  Command
+					Id     int
+					Reason Reason
+				}{
+					OnCmd:  MustDie,
+					Id:     id2,
+					Reason: Eaten,
+				})
+				c.lock.Unlock()
+				onMet(id1, id2)
+			}
+		}
+	}
+
 	for {
 		select {
 		case <-c.die:
@@ -460,33 +626,17 @@ func (c *Client) KillerManager() {
 			return
 		case <-ticker.C:
 			/* Травоядные животные и растения */
-			for _, animal := range StorageHerbivoreAnimal {
-				for id, plant := range StoragePlants {
-					if meet := func(abl int, abt int, bbl int, bbt int) bool {
-						in := func(a int, b int, c int) bool {
-							return (a <= b) && (b <= c)
-						}
-						two := func(a int, b int, c int) bool {
-							return in(a, b, a+c) || in(b, a, b+c)
-						}
-						return two(abl, bbl, EntityWidth) && two(abt, bbt, EntityHeight)
-					}(animal.Left, animal.Top, plant.Left, plant.Top); meet {
-						c.lock.Lock()
-						c.conn.WriteJSON(struct {
-							OnCmd  Command
-							Id     int
-							Reason Reason
-						}{
-							OnCmd:  MustDie,
-							Id:     id,
-							Reason: Eaten,
-						})
-						c.lock.Unlock()
-						delete(StoragePlants, id)
-						animal.Hunger -= 20
-					}
-				}
-			}
+			forr(StorageHerbivoreAnimal.getBaseEntity(),
+				StoragePlants.getBaseEntity(), func(pid int, wid int) {
+					delete(StoragePlants, wid)
+					StorageHerbivoreAnimal[pid].Hunger -= RidPointHungerIfKill
+				})
+			/* Хищные животные и травояденые */
+			forr(StoragePredatoryAnimal.getBaseEntity(),
+				StorageHerbivoreAnimal.getBaseEntity(), func(pid int, wid int) {
+					delete(StorageHerbivoreAnimal, wid)
+					StoragePredatoryAnimal[pid].Hunger -= RidPointHungerIfKill
+				})
 		default:
 			continue
 		}
@@ -534,10 +684,14 @@ func GeneratePredatoryAnimal() {
 		}
 		StoragePredatoryAnimal[an.Id] = an
 		data := an.AsCmdToJs()
+		exist := func() bool {
+			_, ok := StoragePredatoryAnimal[an.Id]
+			return ok
+		}
 		if data != nil {
 			write(data)
-			go an.MoveInTheBackground()
-			go an.StarveInTheBackground()
+			go an.MoveInTheBackground(exist)
+			go an.StarveInTheBackground(exist)
 		}
 	}
 }
@@ -574,8 +728,8 @@ const (
 	AllHeight = CountY*PanelHeight - EntityHeight
 
 	MovingPeriod        = 1000 * time.Millisecond
-	KillCheckerPeriod   = 1000 * time.Millisecond
-	StarveProcessPeriod = 1000 * time.Millisecond
+	KillCheckerPeriod   = 500 * time.Millisecond
+	StarveProcessPeriod = 500 * time.Millisecond
 
 	//DrawMapCmd          Command = "DrawMapCmd"
 	DrawPlant           Command = "DrawPlant"
@@ -589,4 +743,6 @@ const (
 	Starvation       Reason = "Умер от голода"
 	Eaten            Reason = "Его съели"
 	LimitConnections Reason = "Maximum concurrent connections exceeded"
+
+	RidPointHungerIfKill = 20
 )

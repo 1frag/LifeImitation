@@ -1,7 +1,11 @@
-let conn, _data, main, aw, ah;
+let conn, _data, main, root, aw, ah;
 window.onload = function () {
     // todo: реализовать корректно закрытие вебсокета
     main = document.getElementById('main');
+    root = document.documentElement;
+
+    prepareEnviroment();
+
     if (window["WebSocket"]) {
         let protocol = 'ws';
         if (document.location.host.substr(0, 2) !== '0.') {
@@ -49,6 +53,19 @@ window.onload = function () {
     }
 };
 
+function prepareEnviroment() {
+    root.style.setProperty('--set-border-entity', '1px');
+    document.getElementById('turnBorderItem').checked = true;
+    document.getElementById('turnBorderItem').onchange = changeSetBorderEntity;
+}
+
+function changeSetBorderEntity() {
+    root.style.setProperty('--set-border-entity', {
+        '0px': '1px',
+        '1px': '0px',
+    }[root.style.getPropertyValue('--set-border-entity')]);
+}
+
 function isBue(data) {
     alert(data['Reason']);
     return true;
@@ -88,8 +105,14 @@ function isInfoAbout(data) {
     if (data['Class'] === 'Plant') {
         alert('Это растение');
         return true;
-    } else if (data['Class'] === 'ResponsePlants') {
+    } else if (data['Class'] === 'HerbivoreAnimal') {
         alert('Это травоядное животное.');
+        if (data['Target'])
+            alert('Он охотятится');
+        alert('Он голоден на ' + data['Hunger'] + 'из 100');
+        return true;
+    } else if (data['Class'] === 'PredatoryAnimal') {
+        alert('Это хищное животное.');
         if (data['Target'])
             alert('Он охотятится');
         alert('Он голоден на ' + data['Hunger'] + 'из 100');
