@@ -137,13 +137,14 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		StoragePredatoryAnimal = make(map[int]*PredatoryAnimal)
 		LastClient.lock.Unlock()
 	}
-	LastClient = client
-
-	go client.writePump()
-	go client.readPump()
-	go client.MovingManager()
-	go client.KillerManager()
-	go client.PopulatePlants()
+	time.AfterFunc(1000*time.Millisecond, func() {
+		LastClient = client
+		go client.writePump()
+		go client.readPump()
+		go client.MovingManager()
+		go client.KillerManager()
+		go client.PopulatePlants()
+	})
 }
 
 /* Unfortunately now we support not more than one opening connection.
