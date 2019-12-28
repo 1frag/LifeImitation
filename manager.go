@@ -126,7 +126,9 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		m := "Unable to upgrade to websockets"
 		log.Println(err)
+		http.Error(w, m, http.StatusBadRequest)
 		return
 	}
 	client := &Client{
