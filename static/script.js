@@ -1,13 +1,19 @@
 let conn, _data, main, aw, ah;
 window.onload = function () {
+    // todo: реализовать корректно закрытие вебсокета
     main = document.getElementById('main');
     if (window["WebSocket"]) {
-        conn = new WebSocket("ws://" + document.location.host + "/ws");
+        let protocol = 'ws';
+        if (document.location.host.substr(0, 2) !== '0.') {
+            // probably Production
+            protocol += 's'
+        }
+        conn = new WebSocket(protocol + '://' + document.location.host + "/ws");
         conn.onclose = function (evt) {
             console.warn('Connection closed.');
         };
         conn.onmessage = function (evt) {
-            console.debug('Sent: ' + evt.data.substr(0, 100));
+            // console.debug('Sent: ' + evt.data.substr(0, 100));
             if (evt.data === 'ERR') {
                 console.error('Там у них ERR');
                 return;
@@ -15,11 +21,14 @@ window.onload = function () {
             let data = JSON.parse(evt.data);
             _data = data;
             let res = {
-                'DrawMap': ifDrawMap,
+                'DrawMapCmd': ifDrawMap,
                 'DrawPlant': ifDrawPlant,
                 'DrawHerbivoreAnimal': isDrawHerbivoreAnimal,
+                'DrawPredatoryAnimal': isDrawPredatoryAnimal,
                 'InfoAbout': isInfoAbout,
                 'MoveMe': isMoveMe,
+                'MustDie': isMustDie,
+                'Bue': isBue,
             }[data['OnCmd']](data);
 
             if (!res) {
@@ -28,17 +37,36 @@ window.onload = function () {
         };
         conn.onopen = function (evt) {
             console.info('WebSocket has opened just');
-            conn.send(JSON.stringify({'Cmd': 'init', 'Id': -1}));
-        }
+            conn.send(JSON.stringify({'Cmd': 'entity'}));
+            // conn.send(JSON.stringify({'Cmd': 'init', 'Id': -1}));
+        };
+
+        conn.onerror = function (error) {
+            console.error(error.message);
+        };
     } else {
         console.info('Your browser does not support WebSockets.');
     }
 };
 
+function isBue(data) {
+    alert(data['Reason']);
+    return true;
+}
+
+function isMustDie(data) {
+    let ent = document.getElementById('_go_' + data['Id']);
+    if (ent === null) return false;
+    $('#_go_' + data['Id']).fadeOut(1000, function () {
+        ent.remove()
+    });
+    return true;
+}
+
 function _(op, a, b) {
     if (op === 'A')
         return parseInt(a.replace('px', '')) + b + 'px';
-    if (op === 'B'){
+    if (op === 'B') {
         let pref = parseInt(a.replace('px', ''));
         if (pref < 0) return '0px';
         if (pref >= b) return b + 'px';
@@ -74,8 +102,8 @@ function addEntity(data) {
     ent.id = '_go_' + data['Id'];
     ent.className = 'entity';
     main.insertBefore(ent, null);
-    ent.style.top = (data['Top'] * aw) + 'px';
-    ent.style.left = (data['Left'] * ah) + 'px';
+    ent.style.top = data['Top'] + 'px';
+    ent.style.left = data['Left'] + 'px';
     ent.__godata__ = {'id': data['Id']};
     ent.onclick = function () {
         conn.send(JSON.stringify({
@@ -84,6 +112,13 @@ function addEntity(data) {
         }))
     };
     return ent
+}
+
+function isDrawPredatoryAnimal(data) {
+    let halimal = addEntity(data);
+    halimal.style.background = 'url(/static/imgs/panimal.png)';
+    halimal.style['background-size'] = '100%';
+    return true;
 }
 
 function isDrawHerbivoreAnimal(data) {
@@ -112,7 +147,7 @@ function ifDrawMap(data) {
     let width_item = 10, height_item = 10;
     aw = data['Gap'].length * width_item - 30;
     ah = data['Gap'][0].length * height_item - 30;
-    conn.send(JSON.stringify({'Cmd': 'entity', 'Id': -1}));
+
     for (let i = 0; i < data['Gap'].length; i++) {
         for (let j = 0; j < data['Gap'][i].length; j++) {
             let e = document.createElement('div');

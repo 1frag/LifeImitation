@@ -15,11 +15,7 @@ import (
 )
 
 const (
-	pongWait   = 60 * time.Second
-	pingPeriod = (pongWait * 9) / 10
-
-	WIDTH  = 100
-	HEIGHT = 50
+	pongWait = 60 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -28,20 +24,17 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	conn  *websocket.Conn
-	send  chan []byte
+	conn *websocket.Conn
+	send chan []byte
 	lock sync.RWMutex
+	die  chan bool
 }
 
 func (c *Client) readPump() {
-	defer func() {
-		err := c.conn.Close()
-		if err != nil {
-			log.Printf("Ошибка завершения %q", err)
-		}
-	}()
-
-	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	c.conn.SetPongHandler(func(string) error {
+		_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
@@ -50,20 +43,24 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		log.Printf("Was sent: %s", message)
 		c.send <- message
+		select {
+		case <-c.die:
+			return
+		}
 	}
 }
 
-func processMessage(r Request, write func([]byte)) []byte {
+func processMessage(r Request) []byte {
 	switch r.Cmd {
 	case "init":
-		go DrawMap(write) /*DrawMap*/
+		//go DrawMap(write) /*DrawMap*/
 	case "entity":
-		go GeneratePlants(write)          /*DrawPlant*/
-		go GenerateHerbivoreAnimal(write) /*GenerateHerbivoreAnimal*/
+		go GeneratePlants()          /*DrawPlant*/
+		go GenerateHerbivoreAnimal() /*GenerateHerbivoreAnimal*/
+		go GeneratePredatoryAnimal() /*_EMPTY_*/
 	case "info":
-		go GetInfoAbout(write, r.Id) /*InfoAbout*/
+		go GetInfoAbout(r.Id) /*InfoAbout*/
 	}
 	return []byte("ERR")
 }
@@ -73,21 +70,29 @@ type Request struct {
 	Id  int
 }
 
+func write(bytes []byte) {
+	LastClient.lock.Lock()
+	w, err := LastClient.conn.NextWriter(websocket.TextMessage)
+	if err != nil {
+		log.Printf("Не удалось получить writer: %q", err)
+		return
+	}
+	_, err = w.Write(bytes)
+	if err != nil {
+		log.Printf("Произошел какой то ой %q, %s не отправлены",
+			err, string(bytes))
+	}
+	if err := w.Close(); err != nil {
+		return
+	}
+	LastClient.lock.Unlock()
+}
+
 func (c *Client) writePump() {
-	ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		ticker.Stop()
-		err := c.conn.Close()
-		if err != nil {
-			log.Printf("Ошибка завершения в writePump %q", err)
-		}
-	}()
 	for {
 		select {
 		case message, ok := <-c.send:
 			if !ok {
-				err := c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				log.Printf("Ошибка ошибки %q", err)
 				return
 			}
 
@@ -99,33 +104,14 @@ func (c *Client) writePump() {
 				return
 			}
 
-			processMessage(r, func(bytes []byte) {
-				c.lock.Lock()
-				w, err := c.conn.NextWriter(websocket.TextMessage)
-				if err != nil {
-					log.Printf("Не удалось получить writer: %q", err)
-					return
-				}
-				_, err = w.Write(bytes)
-				if err != nil {
-					log.Printf("Произошел какой то ой %q, %s не отправлены",
-						err, string(bytes))
-				} else {
-					log.Printf("Байты успешно переданы %s", string(bytes))
-				}
-				if err := w.Close(); err != nil {
-					return
-				}
-				c.lock.Unlock()
-			})
-		case <-ticker.C:
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Printf("Произошел ой %q", err)
-				return
-			}
+			processMessage(r)
+		case <-c.die:
+			return
 		}
 	}
 }
+
+var LastClient *Client
 
 func serveWs(w http.ResponseWriter, r *http.Request) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -136,11 +122,40 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	}
 	client := &Client{
 		conn: conn,
+		die:  make(chan bool),
 		send: make(chan []byte, 256),
 		lock: sync.RWMutex{},
 	}
 
-	go client.writePump()
-	go client.readPump()
-	go client.MovingManager()
+	if LastClient != nil {
+		LastClient.lock.Lock()
+		_ = LastClient.conn.WriteMessage(websocket.TextMessage, BueMessage)
+		_ = LastClient.conn.Close()
+		close(LastClient.die)
+		StoragePlants = make(map[int]*Plant)
+		StorageHerbivoreAnimal = make(map[int]*HerbivoreAnimal)
+		StoragePredatoryAnimal = make(map[int]*PredatoryAnimal)
+		LastClient.lock.Unlock()
+	}
+	time.AfterFunc(1000*time.Millisecond, func() {
+		LastClient = client
+		go client.writePump()
+		go client.readPump()
+		go client.MovingManager()
+		go client.KillerManager()
+		go client.PopulatePlants()
+	})
 }
+
+/* Unfortunately now we support not more than one opening connection.
+The latest connection will be alive. Others should receive this error message
+*/
+type CmdBue struct {
+	OnCmd  Command
+	Reason Reason
+}
+
+var BueMessage, _ = json.Marshal(CmdBue{
+	OnCmd:  Bue,
+	Reason: LimitConnections,
+})
