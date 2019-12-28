@@ -211,6 +211,7 @@ func (p *BaseAnimal) StarveInTheBackground() {
 	for {
 		select {
 		case <-LastClient.die:
+			log.Print("StarveInTheBackground has been closed")
 			return
 		case <-ticker.C:
 			p.Hunger++
@@ -241,6 +242,7 @@ func (p *BaseAnimal) MoveInTheBackground() {
 	for {
 		select {
 		case <-LastClient.die:
+			log.Print("MoveInTheBackground has been closed")
 			return
 		case <-ticker.C:
 			movingChannel <- p.Id
@@ -440,7 +442,10 @@ func (c *Client) MovingManager() {
 				log.Printf("id=%d не хочет ходить", id)
 			}
 		case <-c.die:
+			log.Print("MovingManager has been closed")
 			return
+		default:
+			continue
 		}
 	}
 }
@@ -451,6 +456,7 @@ func (c *Client) KillerManager() {
 	for {
 		select {
 		case <-c.die:
+			log.Print("KillerManager has been closed")
 			return
 		case <-ticker.C:
 			/* Травоядные животные и растения */
@@ -481,6 +487,8 @@ func (c *Client) KillerManager() {
 					}
 				}
 			}
+		default:
+			continue
 		}
 	}
 }
@@ -541,7 +549,10 @@ func (c *Client) PopulatePlants() {
 		}
 		select {
 		case <-c.die:
+			log.Print("PopulatePlants has been closed")
 			return
+		default:
+			continue
 		}
 	}
 }

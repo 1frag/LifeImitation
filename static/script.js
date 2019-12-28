@@ -106,6 +106,7 @@ function addEntity(data) {
     ent.style.left = data['Left'] + 'px';
     ent.__godata__ = {'id': data['Id']};
     ent.onclick = function () {
+        console.log("qweqwe");
         conn.send(JSON.stringify({
             'Cmd': 'info',
             'Id': data['Id'],

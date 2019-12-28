@@ -43,15 +43,19 @@ func (c *Client) readPump() {
 			}
 			break
 		}
+		log.Print(message)
 		c.send <- message
 		select {
 		case <-c.die:
+			log.Print("readPump has been closed")
 			return
+		default:
+			continue
 		}
 	}
 }
 
-func processMessage(r Request) []byte {
+func processMessage(r Request) {
 	switch r.Cmd {
 	case "init":
 		//go DrawMap(write) /*DrawMap*/
@@ -62,7 +66,6 @@ func processMessage(r Request) []byte {
 	case "info":
 		go GetInfoAbout(r.Id) /*InfoAbout*/
 	}
-	return []byte("ERR")
 }
 
 type Request struct {
@@ -106,7 +109,10 @@ func (c *Client) writePump() {
 
 			processMessage(r)
 		case <-c.die:
+			log.Print("writePump has been closed")
 			return
+		default:
+			continue
 		}
 	}
 }
@@ -123,7 +129,7 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	client := &Client{
 		conn: conn,
 		die:  make(chan bool),
-		send: make(chan []byte, 256),
+		send: make(chan []byte),
 		lock: sync.RWMutex{},
 	}
 
