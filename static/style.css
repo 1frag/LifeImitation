@@ -19,6 +19,26 @@ html {
     position: absolute;
 }
 
+.health-check {
+    border: black 1px solid;
+    background-color: transparent;
+    position: relative;
+    margin-top: -5px;
+    margin-left: -1px;
+    height: 5px;
+    width: 100%;
+}
+
+.health-progress {
+    /*background: chartreuse; /*< 20% */
+    /*background: khaki; /*< 40% */
+    /*background: coral; /*< 60% */
+    /*background: crimson; /*< 80% */
+    /*background: maroon; /*< 100% */
+    width: 100%;
+    height: 100%;
+}
+
 .entity {
     z-index: 2;
     display: block;

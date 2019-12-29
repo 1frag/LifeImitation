@@ -112,7 +112,7 @@ func (s *MapOfPAnimal) getBaseEntity() (r MapOfBEntity) {
 	return
 }
 
-func getEntity(id int) *BaseEntity {
+func GetEntity(id int) *BaseEntity {
 	if o, ok := StoragePredatoryAnimal[id]; ok {
 		return &o.BaseEntity
 	}
@@ -121,6 +121,16 @@ func getEntity(id int) *BaseEntity {
 	}
 	if o, ok := StoragePlants[id]; ok {
 		return &o.BaseEntity
+	}
+	return nil
+}
+
+func GetMovEntity(id int) *BaseAnimal {
+	if o, ok := StoragePredatoryAnimal[id]; ok {
+		return &o.BaseAnimal
+	}
+	if o, ok := StorageHerbivoreAnimal[id]; ok {
+		return &o.BaseAnimal
 	}
 	return nil
 }
@@ -421,6 +431,21 @@ func (c *Client) MovingManager() {
 		Targeting string
 	}
 
+	var SafelyStep = func (o *BaseAnimal, dx int, dy int) {
+		o.Left += dx
+		o.Top += dy
+		if o.Left > AllWidth - EntityWidth {
+			o.Left = AllWidth - EntityWidth
+		} else if o.Left < 0 {
+			o.Left = 0
+		}
+		if o.Top > AllHeight - EntityHeight {
+			o.Top = AllHeight - EntityHeight
+		} else if o.Top < 0 {
+			o.Top = 0
+		}
+	}
+
 	var getHunter = func(id int) *HunterInfomation {
 		if data, ok := StorageHerbivoreAnimal[id]; ok {
 			return &HunterInfomation{
@@ -455,9 +480,8 @@ func (c *Client) MovingManager() {
 				return false
 			}
 			duration--
-			o := getEntity(id)
-			o.Left += dirX
-			o.Top += dirY
+			o := GetMovEntity(id)
+			SafelyStep(o, dirX, dirY)
 			c.lock.Lock()
 			c.conn.WriteJSON(struct {
 				OnCmd    Command
@@ -465,13 +489,16 @@ func (c *Client) MovingManager() {
 				ChangeX  int
 				ChangeY  int
 				IdObj    int
+				Hunger   float64
 			}{
 				OnCmd:    MoveMe,
 				Strategy: 0,
 				ChangeX:  dirX,
 				ChangeY:  dirY,
 				IdObj:    id,
+				Hunger:   float64(o.Hunger) / float64(MaxPointLiveHunger),
 			})
+			log.Print(float64(o.Hunger) / float64(MaxPointLiveHunger))
 
 			c.lock.Unlock()
 			return true
@@ -558,8 +585,7 @@ func (c *Client) MovingManager() {
 			}
 			dx := getStep(o.Left, o.Target.Left)
 			dy := getStep(o.Top, o.Target.Top)
-			o.Left += dx
-			o.Top += dy
+			SafelyStep(o, dx, dy)
 			c.lock.Lock()
 			c.conn.WriteJSON(struct {
 				OnCmd    Command
@@ -567,12 +593,14 @@ func (c *Client) MovingManager() {
 				ChangeX  int
 				ChangeY  int
 				IdObj    int
+				Hunger   float64
 			}{
 				OnCmd:    MoveMe,
 				Strategy: 1,
 				ChangeX:  dx,
 				ChangeY:  dy,
 				IdObj:    id,
+				Hunger:   float64(o.Hunger) / float64(MaxPointLiveHunger),
 			})
 			c.lock.Unlock()
 			return true

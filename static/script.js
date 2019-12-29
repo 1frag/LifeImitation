@@ -92,12 +92,24 @@ function _(op, a, b) {
 }
 
 function isMoveMe(data) {
+    function chooseColor(c) {
+        console.log(c);
+        if (c < 0.2) return 'chartreuse';
+        if (c < 0.4) return 'khaki';
+        if (c < 0.6) return 'coral';
+        if (c < 0.8) return 'crimson';
+        return 'maroon';
+    }
+
     let ent = document.getElementById('_go_' + data['IdObj']);
     if (ent === null) return false;
     ent.style.left = _('A', ent.style.left, data['ChangeX']);
     ent.style.top = _('A', ent.style.top, data['ChangeY']);
-    ent.style.left = _('B', ent.style.left, ah - 30);
-    ent.style.top = _('B', ent.style.top, aw - 30);
+    let h = ent.getElementsByClassName('health-progress')[0];
+    h.style.width = (100 - parseInt(data['Hunger'] * 100)) + '%';
+    h.style['background-color'] = chooseColor(data['Hunger']);
+    // ent.style.left = _('B', ent.style.left, ah - 30);
+    // ent.style.top = _('B', ent.style.top, aw - 30);
     return true;
 }
 
@@ -138,8 +150,18 @@ function addEntity(data) {
     return ent
 }
 
+function addHealthCheck(p) {
+    let health = document.createElement('div');
+    health.className = 'health-check';
+    p.insertBefore(health, null);
+    let progress = document.createElement('div');
+    progress.className = 'health-progress';
+    health.insertBefore(progress, null);
+}
+
 function isDrawPredatoryAnimal(data) {
     let halimal = addEntity(data);
+    addHealthCheck(halimal);
     halimal.style.background = 'url(/static/imgs/panimal.png)';
     halimal.style['background-size'] = '100%';
     return true;
@@ -147,6 +169,7 @@ function isDrawPredatoryAnimal(data) {
 
 function isDrawHerbivoreAnimal(data) {
     let halimal = addEntity(data);
+    addHealthCheck(halimal);
     halimal.style.background = 'url(/static/imgs/hanimal.png)';
     halimal.style['background-size'] = '100%';
     return true;
