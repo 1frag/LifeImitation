@@ -184,13 +184,17 @@ func (p *BaseEntity) remove(reason Reason) {
 }
 
 func (p *HerbivoreAnimal) remove(reason Reason) {
-	p.BaseEntity.remove(reason)
-	delete(StorageHerbivoreAnimal, p.Id)
+	if p != nil {
+		p.BaseEntity.remove(reason)
+		delete(StorageHerbivoreAnimal, p.Id)
+	}
 }
 
 func (p *PredatoryAnimal) remove(reason Reason) {
-	p.BaseEntity.remove(reason)
-	delete(StoragePredatoryAnimal, p.Id)
+	if p != nil {
+		p.BaseEntity.remove(reason)
+		delete(StoragePredatoryAnimal, p.Id)
+	}
 }
 
 func (p *Plant) AsCmdToJs() []byte {
