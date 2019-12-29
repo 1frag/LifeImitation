@@ -57,6 +57,7 @@ func addPlant() {
 			Id:   getNextId(),
 			Top:  rand.Intn(AllHeight),
 			Left: rand.Intn(AllWidth),
+			die:  make(chan bool),
 		},
 		Type: rand.Intn(6),
 	}
@@ -67,8 +68,12 @@ func addPlant() {
 	}
 }
 
+func randRange(left int, right int) int { // left <= result <= right
+	return left + rand.Intn(right-left+1)
+}
+
 func GeneratePlants() {
-	for count := 10 + rand.Int()%15; count > 0; count-- {
+	for i := randRange(MinCountPlants, MaxCountPlants); i > 0; i-- {
 		addPlant()
 	}
 }
@@ -144,11 +149,48 @@ type BaseEntity struct {
 	Id   int
 	Top  int
 	Left int
+	die  chan bool
 }
 
 type Plant struct {
 	BaseEntity
 	Type int
+}
+
+func IsClosed(ch <-chan bool) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *BaseEntity) remove(reason Reason) {
+	if IsClosed(p.die) {
+		log.Printf("Bad attempt to remove id=%d", p.Id)
+		return
+	}
+	log.Printf("Good endlife of id=%d", p.Id)
+	close(p.die)
+	r := MustDieEntity{
+		OnCmd:  MustDie,
+		Id:     p.Id,
+		Reason: reason,
+	}
+	LastClient.lock.Lock()
+	LastClient.conn.WriteJSON(r)
+	LastClient.lock.Unlock()
+}
+
+func (p *HerbivoreAnimal) remove(reason Reason) {
+	p.BaseEntity.remove(reason)
+	delete(StorageHerbivoreAnimal, p.Id)
+}
+
+func (p *PredatoryAnimal) remove(reason Reason) {
+	p.BaseEntity.remove(reason)
+	delete(StoragePredatoryAnimal, p.Id)
 }
 
 func (p *Plant) AsCmdToJs() []byte {
@@ -175,13 +217,14 @@ func (p *Plant) AsCmdToJs() []byte {
 }
 
 func GenerateHerbivoreAnimal() {
-	for count := 6 + rand.Int()%5; count > 0; count-- {
+	for i := randRange(MinCountHAnimal, MaxCountHAnimal); i > 0; i-- {
 		an := &HerbivoreAnimal{
 			BaseAnimal: BaseAnimal{
 				BaseEntity: BaseEntity{
 					Id:   getNextId(),
 					Top:  rand.Intn(AllHeight),
 					Left: rand.Intn(AllWidth),
+					die:  make(chan bool),
 				},
 				Hunger: 0,
 			},
@@ -203,7 +246,7 @@ func GenerateHerbivoreAnimal() {
 
 type BaseAnimal struct {
 	BaseEntity
-	Hunger int /*На сколько сильно голоден из 100. если 100 умирает*/
+	Hunger int
 	Target *BaseEntity
 }
 
@@ -212,7 +255,7 @@ type HerbivoreAnimal struct {
 	Target *Plant
 }
 
-func ServeDebug(w http.ResponseWriter, r *http.Request) {
+func ServeDebug(w http.ResponseWriter, _ *http.Request) {
 	/* Returns all objects in runtime now */
 	d, _ := json.Marshal(struct {
 		Plants  MapOfPlants
@@ -310,42 +353,38 @@ func (p *HerbivoreAnimal) AsCmdToJs() []byte {
 func (p *BaseAnimal) StarveInTheBackground(exist func() bool) {
 	ticker := time.NewTicker(StarveProcessPeriod)
 
-	for {
-		if !exist() {
-			return
-		}
+	for exist() {
 		select {
+		case <-p.die:
+			log.Printf("%d die", p.Id)
+			return
 		case <-LastClient.die:
 			log.Print("StarveInTheBackground has been closed")
 			return
 		case <-ticker.C:
 			p.Hunger++
-			if p.Hunger == 100 {
+			if p.Hunger == MaxPointLiveHunger {
 				// Не сумел найти себе еду! - умираешь
-				js, err := json.Marshal(&struct {
-					OnCmd  Command
-					Id     int
-					Reason Reason
-				}{
-					OnCmd:  MustDie,
-					Id:     p.Id,
-					Reason: Starvation,
-				})
-				if err != nil {
-					log.Print(err)
-				} else {
-					write(js)
-				}
+				p.remove(Starvation)
 			}
 		}
 	}
 }
 
+type MustDieEntity struct {
+	OnCmd  Command
+	Id     int
+	Reason Reason
+}
+
 func (p *BaseAnimal) MoveInTheBackground(exist func() bool) {
 	ticker := time.NewTicker(MovingPeriod)
 
-	for {
+	for exist() {
 		select {
+		case <-p.die:
+			log.Printf("Животное %d умерло", p.Id)
+			return
 		case <-LastClient.die:
 			log.Print("MoveInTheBackground has been closed")
 			return
@@ -396,13 +435,14 @@ func (c *Client) MovingManager() {
 	}
 
 	var getStrategy = func(obj *BaseAnimal) int {
-		if obj.Hunger >= 20 {
+		if obj.Hunger >= PointToHunt {
 			return 1 /* Охотится */
 		}
 		return 0 /* Гуляет */
 	}
 
 	var initWalk = func(id int) {
+		// todo: declare to const
 		var dirX = 5 - rand.Intn(11)
 		var dirY = 5 - rand.Intn(11)
 		var duration = 5 + rand.Intn(10)
@@ -603,17 +643,6 @@ func (c *Client) KillerManager() {
 					continue
 				}
 				log.Printf("1l=%d 1t=%d 2l=%d 2t=%d", e1.Left, e1.Top, e2.Left, e2.Top)
-				c.lock.Lock()
-				c.conn.WriteJSON(struct {
-					OnCmd  Command
-					Id     int
-					Reason Reason
-				}{
-					OnCmd:  MustDie,
-					Id:     id2,
-					Reason: Eaten,
-				})
-				c.lock.Unlock()
 				onMet(id1, id2)
 			}
 		}
@@ -628,13 +657,14 @@ func (c *Client) KillerManager() {
 			/* Травоядные животные и растения */
 			forr(StorageHerbivoreAnimal.getBaseEntity(),
 				StoragePlants.getBaseEntity(), func(pid int, wid int) {
-					delete(StoragePlants, wid)
+					StoragePlants[wid].remove(Eaten)
 					StorageHerbivoreAnimal[pid].Hunger -= RidPointHungerIfKill
 				})
 			/* Хищные животные и травояденые */
 			forr(StoragePredatoryAnimal.getBaseEntity(),
 				StorageHerbivoreAnimal.getBaseEntity(), func(pid int, wid int) {
-					delete(StorageHerbivoreAnimal, wid)
+					log.Print("ertyuiosadkjasmd")
+					StorageHerbivoreAnimal[wid].remove(Eaten)
 					StoragePredatoryAnimal[pid].Hunger -= RidPointHungerIfKill
 				})
 		default:
@@ -670,13 +700,14 @@ func (p *PredatoryAnimal) AsCmdToJs() []byte {
 }
 
 func GeneratePredatoryAnimal() {
-	for count := 1 + rand.Int()%2; count > 0; count-- {
+	for i := randRange(MinCountPAnimal, MaxCountPAnimal); i > 0; i-- {
 		an := &PredatoryAnimal{
 			BaseAnimal: BaseAnimal{
 				BaseEntity: BaseEntity{
 					Id:   getNextId(),
 					Top:  rand.Intn(AllHeight),
 					Left: rand.Intn(AllWidth),
+					die:  make(chan bool),
 				},
 				Hunger: 0,
 			},
@@ -745,4 +776,12 @@ const (
 	LimitConnections Reason = "Maximum concurrent connections exceeded"
 
 	RidPointHungerIfKill = 20
+	PointToHunt          = 20
+	MaxPointLiveHunger   = 100
+	MinCountPlants       = 1
+	MaxCountPlants       = 5
+	MinCountHAnimal      = 10
+	MaxCountHAnimal      = 12
+	MinCountPAnimal      = 10
+	MaxCountPAnimal      = 12
 )

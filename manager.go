@@ -81,6 +81,7 @@ func write(bytes []byte) {
 	w, err := LastClient.conn.NextWriter(websocket.TextMessage)
 	if err != nil {
 		log.Printf("Не удалось получить writer: %q", err)
+		LastClient.die <-true
 		return
 	}
 	_, err = w.Write(bytes)
@@ -143,6 +144,7 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		_ = LastClient.conn.WriteMessage(websocket.TextMessage, BueMessage)
 		_ = LastClient.conn.Close()
 		close(LastClient.die)
+		globId = 0
 		StoragePlants = make(map[int]*Plant)
 		StorageHerbivoreAnimal = make(map[int]*HerbivoreAnimal)
 		StoragePredatoryAnimal = make(map[int]*PredatoryAnimal)
