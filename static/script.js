@@ -93,7 +93,6 @@ function _(op, a, b) {
 
 function isMoveMe(data) {
     function chooseColor(c) {
-        console.log(c);
         if (c < 0.2) return 'chartreuse';
         if (c < 0.4) return 'khaki';
         if (c < 0.6) return 'coral';
@@ -141,7 +140,6 @@ function addEntity(data) {
     ent.style.left = data['Left'] + 'px';
     ent.__godata__ = {'id': data['Id']};
     ent.onclick = function () {
-        console.log("qweqwe");
         conn.send(JSON.stringify({
             'Cmd': 'info',
             'Id': data['Id'],

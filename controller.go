@@ -377,7 +377,7 @@ func (p *BaseAnimal) StarveInTheBackground(exist func() bool) {
 			return
 		case <-ticker.C:
 			p.Hunger++
-			if p.Hunger == MaxPointLiveHunger {
+			if p.Hunger >= MaxPointLiveHunger {
 				// Не сумел найти себе еду! - умираешь
 				p.remove(Starvation)
 			}
@@ -431,19 +431,21 @@ func (c *Client) MovingManager() {
 		Targeting string
 	}
 
-	var SafelyStep = func (o *BaseAnimal, dx int, dy int) {
-		o.Left += dx
-		o.Top += dy
-		if o.Left > AllWidth - EntityWidth {
-			o.Left = AllWidth - EntityWidth
-		} else if o.Left < 0 {
-			o.Left = 0
+	var SafelyStep = func(o *BaseAnimal, dx int, dy int) (nl int, nt int) {
+		var c = func(left int, x int, right int) int {
+			if left > x {
+				return left
+			}
+			if right < x {
+				return right
+			}
+			return x
 		}
-		if o.Top > AllHeight - EntityHeight {
-			o.Top = AllHeight - EntityHeight
-		} else if o.Top < 0 {
-			o.Top = 0
-		}
+		nl = c(0, o.Left+dx, AllWidth-EntityWidth) - o.Left
+		nt = c(0, o.Top+dy, AllHeight-EntityHeight) - o.Top
+		o.Left += nl
+		o.Top += nt
+		return nl, nt
 	}
 
 	var getHunter = func(id int) *HunterInfomation {
@@ -481,7 +483,7 @@ func (c *Client) MovingManager() {
 			}
 			duration--
 			o := GetMovEntity(id)
-			SafelyStep(o, dirX, dirY)
+			dirX, dirY = SafelyStep(o, dirX, dirY)
 			c.lock.Lock()
 			c.conn.WriteJSON(struct {
 				OnCmd    Command
@@ -498,8 +500,6 @@ func (c *Client) MovingManager() {
 				IdObj:    id,
 				Hunger:   float64(o.Hunger) / float64(MaxPointLiveHunger),
 			})
-			log.Print(float64(o.Hunger) / float64(MaxPointLiveHunger))
-
 			c.lock.Unlock()
 			return true
 		}
@@ -585,7 +585,7 @@ func (c *Client) MovingManager() {
 			}
 			dx := getStep(o.Left, o.Target.Left)
 			dy := getStep(o.Top, o.Target.Top)
-			SafelyStep(o, dx, dy)
+			dx, dy = SafelyStep(o, dx, dy)
 			c.lock.Lock()
 			c.conn.WriteJSON(struct {
 				OnCmd    Command
@@ -691,6 +691,9 @@ func (c *Client) KillerManager() {
 				StoragePlants.getBaseEntity(), func(pid int, wid int) {
 					StoragePlants[wid].remove(Eaten)
 					StorageHerbivoreAnimal[pid].Hunger -= RidPointHungerIfKill
+					if StorageHerbivoreAnimal[pid].Hunger < 0 {
+						StorageHerbivoreAnimal[pid].Hunger = 0
+					}
 				})
 			/* Хищные животные и травояденые */
 			forr(StoragePredatoryAnimal.getBaseEntity(),
@@ -698,6 +701,9 @@ func (c *Client) KillerManager() {
 					log.Print("ertyuiosadkjasmd")
 					StorageHerbivoreAnimal[wid].remove(Eaten)
 					StoragePredatoryAnimal[pid].Hunger -= RidPointHungerIfKill
+					if StoragePredatoryAnimal[pid].Hunger < 0 {
+						StoragePredatoryAnimal[pid].Hunger = 0
+					}
 				})
 		default:
 			continue
