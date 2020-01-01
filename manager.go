@@ -65,7 +65,8 @@ func processMessage(r Request) {
 	case "entity":
 		go GeneratePlants()          /*DrawPlant*/
 		go GenerateHerbivoreAnimal() /*GenerateHerbivoreAnimal*/
-		go GeneratePredatoryAnimal() /*_EMPTY_*/
+		go GeneratePredatoryAnimal()
+		go GeneratePeoples()
 	case "info":
 		go GetInfoAbout(r.Id) /*InfoAbout*/
 	}

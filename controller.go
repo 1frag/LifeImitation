@@ -391,6 +391,47 @@ type MustDieEntity struct {
 	Reason Reason
 }
 
+type Gender string
+
+const Male Gender = "Male"
+const Female Gender = "Female"
+
+type People struct {
+	BaseAnimal
+	Age    int
+	State  int
+	Gender Gender
+}
+
+func addPeaple(g Gender, a int) {
+	p := &People{
+		BaseAnimal: BaseAnimal{
+			BaseEntity: BaseEntity{
+				Id:   0,
+				Top:  0,
+				Left: 0,
+				die:  nil,
+			},
+			Hunger: 0,
+			Target: nil,
+		},
+		Age:    a,
+		State:  0,
+		Gender: g,
+	}
+}
+
+func GeneratePeoples() {
+	for count := randRange(5, 10); count > 0; count-- {
+		curGender := Male
+		if rand.Intn(2) == 1 {
+			curGender = Female
+		}
+		curAge := randRange(10, 40)
+		addPeaple(curGender, curAge)
+	}
+}
+
 func (p *BaseAnimal) MoveInTheBackground(exist func() bool) {
 	ticker := time.NewTicker(MovingPeriod)
 

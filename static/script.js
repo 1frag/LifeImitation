@@ -99,6 +99,7 @@ function isMoveMe(data) {
         if (c < 0.8) return 'crimson';
         return 'maroon';
     }
+    // todo: поворачивать когда куда нить идёт
 
     let ent = document.getElementById('_go_' + data['IdObj']);
     if (ent === null) return false;
@@ -107,8 +108,6 @@ function isMoveMe(data) {
     let h = ent.getElementsByClassName('health-progress')[0];
     h.style.width = (100 - parseInt(data['Hunger'] * 100)) + '%';
     h.style['background-color'] = chooseColor(data['Hunger']);
-    // ent.style.left = _('B', ent.style.left, ah - 30);
-    // ent.style.top = _('B', ent.style.top, aw - 30);
     return true;
 }
 
