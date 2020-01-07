@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -96,6 +97,15 @@ func write(bytes []byte) {
 	LastClient.lock.Unlock()
 }
 
+func writeJSON(i interface{}) {
+	d, err := json.Marshal(i)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	write(d)
+}
+
 func (c *Client) writePump() {
 	for {
 		select {
@@ -126,6 +136,7 @@ var LastClient *Client
 
 func serveWs(w http.ResponseWriter, r *http.Request) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	rand.Seed(4)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		m := "Unable to upgrade to websockets"

@@ -24,7 +24,8 @@ window.onload = function () {
             }
             let data = JSON.parse(evt.data);
             _data = data;
-            let res = {
+            let res = ({
+                'DrawPeople': isDrawPeople,
                 'DrawMapCmd': ifDrawMap,
                 'DrawPlant': ifDrawPlant,
                 'DrawHerbivoreAnimal': isDrawHerbivoreAnimal,
@@ -32,8 +33,9 @@ window.onload = function () {
                 'InfoAbout': isInfoAbout,
                 'MoveMe': isMoveMe,
                 'MustDie': isMustDie,
+                'DrawHouse': isDrawHouse,
                 'Bue': isBue,
-            }[data['OnCmd']](data);
+            }[data['OnCmd']] || err_detect)(data);
 
             if (!res) {
                 console.error('Detected problem ' + Object.entries(data));
@@ -52,6 +54,43 @@ window.onload = function () {
         console.info('Your browser does not support WebSockets.');
     }
 };
+
+let failed = [];
+
+function err_detect(data) {
+    failed[failed.length] = data;
+    return false;
+}
+
+function isDrawHouse(data) {
+    let house = addEntity(data);
+    house.style.background = _url_('house');
+    house.style['background-size'] = '100%';
+}
+
+function _url_(of) {
+    return 'url(/static/imgs/' + of + '.png)'
+}
+
+function isDrawPeople(data) {
+    let people = addEntity(data);
+    addHealthCheck(people);
+    let curl = '';
+    if (5 < data['Age'] && data['Age'] < 18 && data['Gender'] === 'Female') {
+        curl = _url_('girl')
+    } else if (5 < data['Age'] && data['Age'] < 18) {
+        curl = _url_('boy')
+    } else if (data['Age'] >= 18 && data['Gender'] === 'Female') {
+        curl = _url_('woman')
+    } else if (data['Age'] >= 18) {
+        curl = _url_('man')
+    } else {
+        curl = _url_('child')
+    }
+    people.style.background = curl;
+    people.style['background-size'] = '100%';
+    return true;
+}
 
 function prepareEnviroment() {
     root.style.setProperty('--set-border-entity', '1px');
@@ -99,6 +138,7 @@ function isMoveMe(data) {
         if (c < 0.8) return 'crimson';
         return 'maroon';
     }
+
     // todo: поворачивать когда куда нить идёт
 
     let ent = document.getElementById('_go_' + data['IdObj']);
@@ -159,7 +199,7 @@ function addHealthCheck(p) {
 function isDrawPredatoryAnimal(data) {
     let halimal = addEntity(data);
     addHealthCheck(halimal);
-    halimal.style.background = 'url(/static/imgs/panimal.png)';
+    halimal.style.background = _url_('panimal');
     halimal.style['background-size'] = '100%';
     return true;
 }
@@ -167,7 +207,7 @@ function isDrawPredatoryAnimal(data) {
 function isDrawHerbivoreAnimal(data) {
     let halimal = addEntity(data);
     addHealthCheck(halimal);
-    halimal.style.background = 'url(/static/imgs/hanimal.png)';
+    halimal.style.background = _url_('hanimal');
     halimal.style['background-size'] = '100%';
     return true;
 }
@@ -175,12 +215,12 @@ function isDrawHerbivoreAnimal(data) {
 function ifDrawPlant(data) {
     let plant = addEntity(data);
     plant.style.background = {
-        0: 'url(/static/imgs/plant_type1.png)',
-        1: 'url(/static/imgs/plant_type2.png)',
-        2: 'url(/static/imgs/plant_type3.png)',
-        3: 'url(/static/imgs/plant_type4.png)',
-        4: 'url(/static/imgs/plant_type5.png)',
-        5: 'url(/static/imgs/plant_type6.png)',
+        0: _url_('plant_type1'),
+        1: _url_('plant_type2'),
+        2: _url_('plant_type3'),
+        3: _url_('plant_type4'),
+        4: _url_('plant_type5'),
+        5: _url_('plant_type6'),
     }[data['Type']];
     plant.style['background-size'] = '100%';
     return true;

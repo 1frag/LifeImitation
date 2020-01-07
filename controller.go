@@ -51,15 +51,19 @@ func getNextId() int {
 	return globId
 }
 
+func GenerateBaseEntity() *BaseEntity {
+	return &BaseEntity{
+		Id:   getNextId(),
+		Top:  rand.Intn(AllHeight),
+		Left: rand.Intn(AllWidth),
+		die:  make(chan bool),
+	}
+}
+
 func addPlant() {
 	pl := &Plant{
-		BaseEntity: BaseEntity{
-			Id:   getNextId(),
-			Top:  rand.Intn(AllHeight),
-			Left: rand.Intn(AllWidth),
-			die:  make(chan bool),
-		},
-		Type: rand.Intn(6),
+		BaseEntity: *GenerateBaseEntity(),
+		Type:       rand.Intn(6),
 	}
 	StoragePlants[pl.Id] = pl
 	data := pl.AsCmdToJs()
@@ -81,14 +85,26 @@ func GeneratePlants() {
 var StoragePlants MapOfPlants = make(map[int]*Plant)
 var StorageHerbivoreAnimal MapOfHAnimal = make(map[int]*HerbivoreAnimal)
 var StoragePredatoryAnimal MapOfPAnimal = make(map[int]*PredatoryAnimal)
+var StoragePeople MapOfPeople = make(map[int]*People)
+var StorageHouses MapOfHouses = make(map[int]*House)
 
 type MapOfPlants map[int]*Plant
 type MapOfHAnimal map[int]*HerbivoreAnimal
 type MapOfPAnimal map[int]*PredatoryAnimal
 type MapOfBEntity map[int]*BaseEntity
+type MapOfPeople map[int]*People
+type MapOfHouses map[int]*House
 
 // todo: how to fix this shit?
 func (s *MapOfPlants) getBaseEntity() (r MapOfBEntity) {
+	r = make(map[int]*BaseEntity)
+	for i, e := range *s {
+		r[i] = &e.BaseEntity
+	}
+	return
+}
+
+func (s *MapOfPeople) getBaseEntity() (r MapOfBEntity) {
 	r = make(map[int]*BaseEntity)
 	for i, e := range *s {
 		r[i] = &e.BaseEntity
@@ -105,6 +121,14 @@ func (s *MapOfHAnimal) getBaseEntity() (r MapOfBEntity) {
 }
 
 func (s *MapOfPAnimal) getBaseEntity() (r MapOfBEntity) {
+	r = make(map[int]*BaseEntity)
+	for i, e := range *s {
+		r[i] = &e.BaseEntity
+	}
+	return
+}
+
+func (s *MapOfHouses) getBaseEntity() (r MapOfBEntity) {
 	r = make(map[int]*BaseEntity)
 	for i, e := range *s {
 		r[i] = &e.BaseEntity
@@ -181,7 +205,6 @@ func (p *BaseEntity) remove(reason Reason) {
 		log.Printf("Bad attempt to remove id=%d", p.Id)
 		return
 	}
-	log.Printf("Good endlife of id=%d", p.Id)
 	close(p.die)
 	r := MustDieEntity{
 		OnCmd:  MustDie,
@@ -191,6 +214,13 @@ func (p *BaseEntity) remove(reason Reason) {
 	LastClient.lock.Lock()
 	LastClient.conn.WriteJSON(r)
 	LastClient.lock.Unlock()
+}
+
+func (p *Plant) remove(reason Reason) {
+	if p != nil {
+		p.BaseEntity.remove(reason)
+		delete(StoragePlants, p.Id)
+	}
 }
 
 func (p *HerbivoreAnimal) remove(reason Reason) {
@@ -207,16 +237,23 @@ func (p *PredatoryAnimal) remove(reason Reason) {
 	}
 }
 
-func (p *Plant) AsCmdToJs() []byte {
-	type RespDrawPlant struct {
-		OnCmd Command
-		Top   int
-		Left  int
-		Type  int
-		Id    int
+func (p *People) remove(reason Reason) {
+	if p != nil {
+		p.BaseEntity.remove(reason)
+		delete(StoragePeople, p.Id)
 	}
+}
 
-	data, err := json.Marshal(RespDrawPlant{
+type JSONForDrawEntity struct {
+	OnCmd Command
+	Top   int
+	Left  int
+	Type  int
+	Id    int
+}
+
+func (p *Plant) AsCmdToJs() []byte {
+	data, err := json.Marshal(JSONForDrawEntity{
 		OnCmd: DrawPlant,
 		Top:   p.Top,
 		Left:  p.Left,
@@ -234,13 +271,8 @@ func GenerateHerbivoreAnimal() {
 	for i := randRange(MinCountHAnimal, MaxCountHAnimal); i > 0; i-- {
 		an := &HerbivoreAnimal{
 			BaseAnimal: BaseAnimal{
-				BaseEntity: BaseEntity{
-					Id:   getNextId(),
-					Top:  rand.Intn(AllHeight),
-					Left: rand.Intn(AllWidth),
-					die:  make(chan bool),
-				},
-				Hunger: 0,
+				BaseEntity: *GenerateBaseEntity(),
+				Hunger:     0,
 			},
 			Target: nil,
 		}
@@ -398,27 +430,254 @@ const Female Gender = "Female"
 
 type People struct {
 	BaseAnimal
-	Age    int
-	State  int
-	Gender Gender
+	Age          int
+	State        int
+	Target       *People
+	Gender       Gender
+	SocialStatus SocialStatus
+	Telegram     chan TelegramMessage
+}
+
+type House struct {
+	BaseEntity
+	Wife    *People
+	Husband *People
 }
 
 func addPeaple(g Gender, a int) {
 	p := &People{
 		BaseAnimal: BaseAnimal{
-			BaseEntity: BaseEntity{
-				Id:   0,
-				Top:  0,
-				Left: 0,
-				die:  nil,
-			},
-			Hunger: 0,
-			Target: nil,
+			BaseEntity: *GenerateBaseEntity(),
+			Hunger:     0,
+			Target:     nil,
 		},
 		Age:    a,
 		State:  0,
 		Gender: g,
 	}
+	write(p.asCmdCreate())
+	StoragePeople[p.Id] = p
+	go p.LifeCycle()
+	log.Print("People sent")
+}
+
+func (p *People) LifeCycle() {
+	curState := 0
+	ticker := time.NewTicker(LifeCyclePeriod)
+	p.SocialStatus = Child
+
+	for !IsClosed(p.die) {
+		select {
+		case <-p.die:
+			log.Printf("Животное %d умерло", p.Id)
+			return
+		case <-LastClient.die:
+			log.Print("LifeCycle has been closed")
+			return
+		case <-ticker.C:
+			if curState < 6 {
+				select {
+				case m := <-p.Telegram:
+					if m.Head == KillPlant {
+						curState += 1
+					} else if m.Head == KillHAnimal {
+						curState += 2
+					} else if m.Head == KillPlant {
+						curState += 3
+					}
+				default:
+					// найди ближайшего и иди к нему
+					l, t := p.nearest(7).Left, p.nearest(7).Top
+					var dl = approach(p.Left, l, 5)
+					var dt = approach(p.Top, t, 5)
+					SendMoveMe(dl, dt, p.Id, (1.0+float64(curState))/7.0)
+				}
+			} else if curState == 7 {
+				// ищет себе вторую половинку
+				onMet := func(o *People) {
+					l, t := o.Left, o.Top
+					var dl = approach(p.Left, l, 5)
+					var dt = approach(p.Top, t, 5)
+					SendMoveMe(dl, dt, p.Id, 1)
+					p.SocialStatus = InTheWay
+					p.Target = o
+					curState = 8
+				}
+
+				p.SocialStatus = InSearch
+				for _, o := range StoragePeople {
+					if o.Gender != p.Gender && o.SocialStatus == InSearch {
+						o.Telegram <- p.MessageWithSign(LetSGetMarried)
+						onMet(o)
+						break
+					}
+				}
+				select {
+				case m := <-p.Telegram:
+					if m.Head == LetSGetMarried {
+						if pTarget, ok := StoragePeople[m.From]; ok {
+							onMet(pTarget)
+							break
+						}
+					}
+				default:
+					continue
+				}
+			} else if curState == 8 {
+				if p.Target == nil {
+					curState = 7
+					continue
+				}
+				if _, ok := StoragePeople[curState]; !ok {
+					curState = 7
+					continue
+				}
+				dl := absForInt(p.Left - p.Target.Left)
+				dt := absForInt(p.Top - p.Target.Top)
+				// TODO: CONST:: 50
+				if 0 <= dl && dl <= 50 && 0 <= dt && dt <= 50 {
+					curState = 9
+					continue
+				} else {
+					p.Target.Telegram <- p.MessageWithSign(GoToState9)
+				}
+				select {
+				case m := <-p.Telegram:
+					if m.Head == GoToState9 {
+						curState = 9
+						continue
+					}
+				default:
+					continue
+				}
+			} else if curState == 9 {
+				if p.Gender == Male {
+					// todo: 900, 30, 30
+					h := p.nearest(16)
+					var newHouse = House{
+						BaseEntity: *GenerateBaseEntity(),
+						Wife:       p.Target,
+						Husband:    p,
+					}
+					nearby := &p.BaseEntity
+					if h != nil && dist(h, &p.BaseEntity) < 400 {
+						nearby = h
+					}
+					newHouse.Left = nearby.Left + 30
+					newHouse.Top = nearby.Top + 30
+					writeJSON(JSONForDrawEntity{
+						OnCmd: DrawHouse,
+						Top:   newHouse.Top,
+						Left:  newHouse.Left,
+						Id:    newHouse.Id,
+					})
+					p.Target.Telegram <- p.MessageWithSign(HouseHasBuilt)
+				}
+			}
+		}
+	}
+}
+
+func dist2(a *BaseEntity, b *BaseEntity) float64 {
+	return math.Pow(float64(a.Left-b.Left), 2) +
+		math.Pow(float64(a.Top-b.Top), 2)
+}
+
+func dist(a *BaseEntity, b *BaseEntity) float64 {
+	return math.Pow(dist2(a, b), 0.5)
+}
+
+func (p *People) MessageWithSign(header HeadTelegramMessage) TelegramMessage {
+	return TelegramMessage{
+		Head: header,
+		From: p.Id,
+	}
+}
+
+func approach(from int, to int, rightSide int) int {
+	if fv := func() int {
+		if from < to {
+			return randRange(0, rightSide)
+		} else if from == to {
+			return 0
+		} else {
+			return -randRange(0, rightSide)
+		}
+	}(); absForInt(fv) < absForInt(from-to) {
+		return fv
+	} else {
+		return to - from
+	}
+}
+
+func absForInt(i int) int {
+	if i < 0 {
+		return -i
+	}
+	return i
+}
+
+func (e *BaseEntity) nearest(param int) *BaseEntity {
+	/*
+		1 - трава
+		2 - зайцы
+		4 - волки
+		8 - люди
+		16 - дома
+	*/
+	inner := func(s MapOfBEntity) *BaseEntity {
+		bi, n := -1, -1
+		var best *BaseEntity = nil
+		for i, o := range s {
+			if o == nil {
+				continue
+			}
+			p := (o.Left-e.Left)*(o.Left-e.Left) +
+				(o.Top-e.Top)*(o.Top-e.Top)
+			if bi == -1 || n > p {
+				bi = i
+				n = p
+				best = o
+			}
+		}
+		return best
+	}
+	var m MapOfBEntity = make(map[int]*BaseEntity)
+	if param&1 == 1 {
+		m[0] = inner(StoragePlants.getBaseEntity())
+	}
+	if param&2 == 2 {
+		m[1] = inner(StoragePredatoryAnimal.getBaseEntity())
+	}
+	if param&4 == 4 {
+		m[2] = inner(StorageHerbivoreAnimal.getBaseEntity())
+	}
+	if param&8 == 8 {
+		m[3] = inner(StoragePeople.getBaseEntity())
+	}
+	if param&16 == 16 {
+		m[4] = inner(StorageHouses.getBaseEntity())
+	}
+	return inner(m)
+}
+
+func (p *People) asCmdCreate() []byte {
+	d, _ := json.Marshal(struct {
+		OnCmd  Command
+		Id     int
+		Top    int
+		Left   int
+		Age    int
+		Gender Gender
+	}{
+		OnCmd:  DrawPeople,
+		Id:     p.Id,
+		Top:    p.Top,
+		Left:   p.Left,
+		Age:    p.Age,
+		Gender: p.Gender,
+	})
+	return d
 }
 
 func GeneratePeoples() {
@@ -525,23 +784,7 @@ func (c *Client) MovingManager() {
 			duration--
 			o := GetMovEntity(id)
 			dirX, dirY = SafelyStep(o, dirX, dirY)
-			c.lock.Lock()
-			c.conn.WriteJSON(struct {
-				OnCmd    Command
-				Strategy int
-				ChangeX  int
-				ChangeY  int
-				IdObj    int
-				Hunger   float64
-			}{
-				OnCmd:    MoveMe,
-				Strategy: 0,
-				ChangeX:  dirX,
-				ChangeY:  dirY,
-				IdObj:    id,
-				Hunger:   float64(o.Hunger) / float64(MaxPointLiveHunger),
-			})
-			c.lock.Unlock()
+			SendMoveMe(dirX, dirY, id, float64(o.Hunger)/float64(MaxPointLiveHunger))
 			return true
 		}
 		_memory[id] = struct {
@@ -627,23 +870,7 @@ func (c *Client) MovingManager() {
 			dx := getStep(o.Left, o.Target.Left)
 			dy := getStep(o.Top, o.Target.Top)
 			dx, dy = SafelyStep(o, dx, dy)
-			c.lock.Lock()
-			c.conn.WriteJSON(struct {
-				OnCmd    Command
-				Strategy int
-				ChangeX  int
-				ChangeY  int
-				IdObj    int
-				Hunger   float64
-			}{
-				OnCmd:    MoveMe,
-				Strategy: 1,
-				ChangeX:  dx,
-				ChangeY:  dy,
-				IdObj:    id,
-				Hunger:   float64(o.Hunger) / float64(MaxPointLiveHunger),
-			})
-			c.lock.Unlock()
+			SendMoveMe(dx, dy, id, float64(o.Hunger)/float64(MaxPointLiveHunger))
 			return true
 		}}
 	}
@@ -691,6 +918,23 @@ func (c *Client) MovingManager() {
 	}
 }
 
+func SendMoveMe(dirX int, dirY int, id int, hunger float64) {
+	d, _ := json.Marshal(struct {
+		OnCmd   Command
+		ChangeX int
+		ChangeY int
+		IdObj   int
+		Hunger  float64
+	}{
+		OnCmd:   MoveMe,
+		ChangeX: dirX,
+		ChangeY: dirY,
+		IdObj:   id,
+		Hunger:  hunger,
+	})
+	write(d)
+}
+
 func (c *Client) KillerManager() {
 	ticker := time.NewTicker(KillCheckerPeriod)
 
@@ -715,7 +959,6 @@ func (c *Client) KillerManager() {
 				if !areMet(e1.Left, e1.Top, e2.Left, e2.Top) {
 					continue
 				}
-				log.Printf("1l=%d 1t=%d 2l=%d 2t=%d", e1.Left, e1.Top, e2.Left, e2.Top)
 				onMet(id1, id2)
 			}
 		}
@@ -739,12 +982,35 @@ func (c *Client) KillerManager() {
 			/* Хищные животные и травояденые */
 			forr(StoragePredatoryAnimal.getBaseEntity(),
 				StorageHerbivoreAnimal.getBaseEntity(), func(pid int, wid int) {
-					log.Print("ertyuiosadkjasmd")
 					StorageHerbivoreAnimal[wid].remove(Eaten)
 					StoragePredatoryAnimal[pid].Hunger -= RidPointHungerIfKill
 					if StoragePredatoryAnimal[pid].Hunger < 0 {
 						StoragePredatoryAnimal[pid].Hunger = 0
 					}
+				})
+
+			/* Люди и трава */
+			forr(StoragePeople.getBaseEntity(),
+				StoragePlants.getBaseEntity(), func(pid int, wid int) {
+					log.Printf("Люди(%d) и трава(%d)", pid, wid)
+					StoragePlants[wid].remove(Eaten)
+					StoragePeople[pid].Telegram <- TelegramMessage{Head: KillPlant}
+				})
+
+			/* Люди и зайцы */
+			forr(StoragePeople.getBaseEntity(),
+				StorageHerbivoreAnimal.getBaseEntity(), func(pid int, wid int) {
+					log.Printf("Люди(%d) и зайцы(%d)", pid, wid)
+					StorageHerbivoreAnimal[wid].remove(Eaten)
+					StoragePeople[pid].Telegram <- TelegramMessage{Head: KillHAnimal}
+				})
+
+			/* Люди и волки */
+			forr(StoragePeople.getBaseEntity(),
+				StoragePredatoryAnimal.getBaseEntity(), func(pid int, wid int) {
+					StoragePredatoryAnimal[wid].remove(Eaten)
+					log.Printf("Люди(%d) и волки(%d)", pid, wid)
+					StoragePeople[pid].Telegram <- TelegramMessage{Head: KillPAnimal}
 				})
 		default:
 			continue
@@ -782,13 +1048,8 @@ func GeneratePredatoryAnimal() {
 	for i := randRange(MinCountPAnimal, MaxCountPAnimal); i > 0; i-- {
 		an := &PredatoryAnimal{
 			BaseAnimal: BaseAnimal{
-				BaseEntity: BaseEntity{
-					Id:   getNextId(),
-					Top:  rand.Intn(AllHeight),
-					Left: rand.Intn(AllWidth),
-					die:  make(chan bool),
-				},
-				Hunger: 0,
+				BaseEntity: *GenerateBaseEntity(),
+				Hunger:     0,
 			},
 			Target: nil,
 		}
@@ -823,6 +1084,12 @@ func (c *Client) PopulatePlants() {
 
 type Command string
 type Reason string
+type HeadTelegramMessage string
+type TelegramMessage struct {
+	Head HeadTelegramMessage
+	From int
+}
+type SocialStatus string
 
 const (
 	CountX = 100
@@ -840,8 +1107,15 @@ const (
 	MovingPeriod        = 1000 * time.Millisecond
 	KillCheckerPeriod   = 500 * time.Millisecond
 	StarveProcessPeriod = 500 * time.Millisecond
+	LifeCyclePeriod     = 1000 * time.Millisecond
+
+	Child      SocialStatus = "Ребенок еще (рано пока)"
+	InSearch   SocialStatus = "В активном поиске"
+	InTheWay   SocialStatus = "По пути к своей половинке"
+	InMarriage SocialStatus = "Женат / замужем"
 
 	//DrawMapCmd          Command = "DrawMapCmd"
+	DrawPeople          Command = "DrawPeople"
 	DrawPlant           Command = "DrawPlant"
 	InfoAbout           Command = "InfoAbout"
 	DrawHerbivoreAnimal Command = "DrawHerbivoreAnimal"
@@ -849,6 +1123,14 @@ const (
 	MustDie             Command = "MustDie"
 	DrawPredatoryAnimal Command = "DrawPredatoryAnimal"
 	Bue                 Command = "Bue"
+	DrawHouse           Command = "DrawHouse"
+
+	KillPlant      HeadTelegramMessage = "Kill->Plant"
+	KillHAnimal    HeadTelegramMessage = "Kill->HAnimal"
+	KillPAnimal    HeadTelegramMessage = "Kill->PAnimal"
+	LetSGetMarried HeadTelegramMessage = "letSGetMarried"
+	GoToState9     HeadTelegramMessage = "GoToState9"
+	HouseHasBuilt  HeadTelegramMessage = "HouseHasBuilt"
 
 	Starvation       Reason = "Умер от голода"
 	Eaten            Reason = "Его съели"
