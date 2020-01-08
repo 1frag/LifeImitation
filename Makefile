@@ -9,3 +9,5 @@ deploy:
 	git push heroku HEAD:master
 logs:
 	heroku logs --tail
+restart:
+	heroku restart
