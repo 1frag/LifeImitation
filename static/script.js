@@ -64,6 +64,7 @@ function err_detect(data) {
 
 function isDrawHouse(data) {
     let house = addEntity(data);
+    house.className += ' house';
     house.style.background = _url_('house');
     house.style['background-size'] = '100%';
 }

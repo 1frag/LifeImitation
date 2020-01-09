@@ -136,7 +136,7 @@ var LastClient *Client
 
 func serveWs(w http.ResponseWriter, r *http.Request) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	rand.Seed(15)
+	rand.Seed(123)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		m := "Unable to upgrade to websockets"
