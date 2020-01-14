@@ -694,10 +694,11 @@ func (p *People) LifeCycle() {
 					p.House.CreateChild()
 				}
 				// конец второй части, todo: next
-				return
+				break
 			}
 		}
 	}
+	log.Printf("The end for person with id=%d", p.Id)
 }
 
 func (h *House) Locate(gender Gender) *BaseEntity {
