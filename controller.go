@@ -612,6 +612,8 @@ func (p *People) LifeCycle() {
 								Left:  home.Left,
 								Id:    home.Id,
 							})
+							log.Printf("Built house %d (%d + %d)", home.Id,
+								p.Id, p.Target.Id)
 							StorageHouses[home.Id] = home
 							p.Target.Telegram <- p.MessageWithSign(HouseHasBuilt, home.Id)
 							p.State = 10
