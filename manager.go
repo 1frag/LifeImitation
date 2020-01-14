@@ -141,7 +141,7 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		m := "Unable to upgrade to websockets"
-		log.Println(err)
+		log.Print(err)
 		http.Error(w, m, http.StatusBadRequest)
 		return
 	}
@@ -153,6 +153,7 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if LastClient != nil {
+		log.Print("Last client has been killed")
 		LastClient.lock.Lock()
 		_ = LastClient.conn.WriteMessage(websocket.TextMessage, BueMessage)
 		_ = LastClient.conn.Close()
@@ -166,6 +167,7 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		LastClient.lock.Unlock()
 	}
 
+	log.Print("Start new game")
 	LastClient = client
 	go client.writePump()
 	go client.readPump()
