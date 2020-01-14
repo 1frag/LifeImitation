@@ -187,14 +187,11 @@ func (e *BaseEntity) remove(reason Reason) {
 		return
 	}
 	close(e.die)
-	r := MustDieEntity{
+	writeJSON(MustDieEntity{
 		OnCmd:  MustDie,
 		Id:     e.Id,
 		Reason: reason,
-	}
-	LastClient.lock.Lock()
-	LastClient.conn.WriteJSON(r)
-	LastClient.lock.Unlock()
+	})
 }
 
 func (p *Plant) remove(reason Reason) {

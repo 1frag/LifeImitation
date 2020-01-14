@@ -155,16 +155,23 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	if LastClient != nil {
 		log.Print("Last client has been killed")
 		LastClient.lock.Lock()
+		log.Print("1")
 		_ = LastClient.conn.WriteMessage(websocket.TextMessage, BueMessage)
+		log.Print("2")
 		_ = LastClient.conn.Close()
+		log.Print("3")
 		close(LastClient.die)
+		log.Print("4")
 		globId = 0
+		log.Print("5")
 		StoragePlants = make(map[int]*Plant)
 		StorageHerbivoreAnimal = make(map[int]*HerbivoreAnimal)
 		StoragePredatoryAnimal = make(map[int]*PredatoryAnimal)
 		StorageHouses = make(map[int]*House)
 		StoragePeople = make(map[int]*People)
+		log.Print("6")
 		LastClient.lock.Unlock()
+		log.Print("7")
 	}
 
 	log.Print("Start new game")
