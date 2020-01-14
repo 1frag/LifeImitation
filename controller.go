@@ -285,7 +285,7 @@ type HerbivoreAnimal struct {
 func ServeDebug(w http.ResponseWriter, _ *http.Request) {
 	/* Returns all objects in runtime now */
 	var data = make(map[int]map[string]string)
-	for i, o := range MapOfPlants {
+	for i, o := range StoragePlants {
 		var about = make(map[string]string)
 		about["left"] = string(o.Left)
 		about["top"] = string(o.Top)
