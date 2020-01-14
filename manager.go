@@ -136,6 +136,7 @@ var LastClient *Client
 
 func serveWs(w http.ResponseWriter, r *http.Request) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.Print("func serveWs")
 	rand.Seed(123)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -160,6 +161,8 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		StoragePlants = make(map[int]*Plant)
 		StorageHerbivoreAnimal = make(map[int]*HerbivoreAnimal)
 		StoragePredatoryAnimal = make(map[int]*PredatoryAnimal)
+		StorageHouses = make(map[int]*House)
+		StoragePeople = make(map[int]*People)
 		LastClient.lock.Unlock()
 	}
 
