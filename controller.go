@@ -284,19 +284,70 @@ type HerbivoreAnimal struct {
 
 func ServeDebug(w http.ResponseWriter, _ *http.Request) {
 	/* Returns all objects in runtime now */
-	d, _ := json.Marshal(struct {
-		Plants  MapOfPlants
-		HAnimal MapOfHAnimal
-		PAnimal MapOfPAnimal
-		Peoples MapOfBEntity
-		Houses  MapOfHouses
-	}{
-		Plants:  StoragePlants,
-		HAnimal: StorageHerbivoreAnimal,
-		PAnimal: StoragePredatoryAnimal,
-		Peoples: StoragePeople.getBaseEntity(),
-		Houses:  StorageHouses,
-	})
+	var data = make(map[int]map[string]string)
+	for i, o := range MapOfPlants {
+		var about = make(map[string]string)
+		about["left"] = string(o.Left)
+		about["top"] = string(o.Top)
+		about["type"] = string(o.Type)
+		data[i] = about
+	}
+	for i, o := range StorageHerbivoreAnimal {
+		var about = make(map[string]string)
+		about["left"] = string(o.Left)
+		about["top"] = string(o.Top)
+		about["hunger"] = string(o.Hunger)
+		data[i] = about
+	}
+	for i, o := range StoragePredatoryAnimal {
+		var about = make(map[string]string)
+		about["left"] = string(o.Left)
+		about["top"] = string(o.Top)
+		about["hunger"] = string(o.Hunger)
+		data[i] = about
+	}
+	for i, o := range StoragePeople {
+		var about = make(map[string]string)
+		about["left"] = string(o.Left)
+		about["top"] = string(o.Top)
+		about["hunger"] = string(o.Hunger)
+		if o.Target == nil {
+			about["target"] = "__nil__"
+		} else {
+			about["target"] = string(o.Target.Id)
+		}
+		data[i] = about
+	}
+	for i, o := range StoragePeople {
+		var about = make(map[string]string)
+		about["left"] = string(o.Left)
+		about["top"] = string(o.Top)
+		about["hunger"] = string(o.Hunger)
+		if o.Target == nil {
+			about["target"] = "__nil__"
+		} else {
+			about["target"] = string(o.Target.Id)
+		}
+		about["state"] = string(o.State)
+		data[i] = about
+	}
+	for i, o := range StorageHouses {
+		var about = make(map[string]string)
+		about["left"] = string(o.Left)
+		about["top"] = string(o.Top)
+		if o.Husband == nil {
+			about["Husband"] = "__nil__"
+		} else {
+			about["Husband"] = string(o.Husband.Id)
+		}
+		if o.Wife == nil {
+			about["Wife"] = "__nil__"
+		} else {
+			about["Wife"] = string(o.Wife.Id)
+		}
+		data[i] = about
+	}
+	d, _ := json.Marshal(data)
 	_, _ = w.Write(d)
 }
 
@@ -458,7 +509,6 @@ func (p *People) LifeCycle() {
 		SendMoveMe(dl, dt, p.Id, hunger)
 	}
 
-	curState := 0
 	ticker := time.NewTicker(LifeCyclePeriod)
 	p.SocialStatus = Child
 	var home *House = nil
@@ -473,33 +523,33 @@ func (p *People) LifeCycle() {
 			log.Print("LifeCycle has been closed")
 			return
 		case <-ticker.C:
-			if curState < 6 {
+			if p.State < 6 {
 				select {
 				case m := <-p.Telegram:
 					if m.Head == KillPlant {
-						curState += 1
+						p.State += 1
 					} else if m.Head == KillHAnimal {
-						curState += 2
+						p.State += 2
 					} else if m.Head == KillPAnimal {
-						curState += 3
+						p.State += 3
 					} else {
 						log.Fatal("Unexpected Head Message")
 					}
-					if curState > 6 {
-						curState = 7
+					if p.State > 6 {
+						p.State = 7
 					}
 				default:
 					// найди ближайшего и иди к нему
-					goToObject(p.nearest(7), (7.0-float64(curState))/8.0)
+					goToObject(p.nearest(7), (7.0-float64(p.State))/8.0)
 				}
-			} else if curState == 7 {
-				log.Printf("%d has curState==7 G=%s S=%s", p.Id, p.Gender, p.SocialStatus)
+			} else if p.State == 7 {
+				log.Printf("%d has p.State==7 G=%s S=%s", p.Id, p.Gender, p.SocialStatus)
 				// ищет себе вторую половинку
 				onMet := func(o *People) {
 					goToObject(&o.BaseEntity, 0)
 					p.SocialStatus = InTheWay
 					p.Target = o
-					curState = 8
+					p.State = 8
 				}
 
 				p.SocialStatus = InSearch
@@ -525,19 +575,19 @@ func (p *People) LifeCycle() {
 				default:
 					continue
 				}
-			} else if curState == 8 {
+			} else if p.State == 8 {
 				if p.Target == nil {
-					curState = 7
+					p.State = 7
 					continue
 				}
 				if _, ok := StoragePeople[p.Target.Id]; !ok {
-					curState = 7
+					p.State = 7
 					continue
 				}
 				dl := absForInt(p.Left - p.Target.Left)
 				dt := absForInt(p.Top - p.Target.Top)
 				if 0 <= dl && dl <= EntityWidth && 0 <= dt && dt <= EntityHeight {
-					curState = 9
+					p.State = 9
 					p.Target.Telegram <- p.MessageWithSign(GoToState9, nil)
 					continue
 				} else {
@@ -546,13 +596,13 @@ func (p *People) LifeCycle() {
 				select {
 				case m := <-p.Telegram:
 					if m.Head == GoToState9 {
-						curState = 9
+						p.State = 9
 						continue
 					}
 				default:
 					continue
 				}
-			} else if curState == 9 {
+			} else if p.State == 9 {
 				p.SocialStatus = InMarriage
 				if p.Gender == Male {
 					if home != nil {
@@ -566,7 +616,7 @@ func (p *People) LifeCycle() {
 							})
 							StorageHouses[home.Id] = home
 							p.Target.Telegram <- p.MessageWithSign(HouseHasBuilt, home.Id)
-							curState = 10
+							p.State = 10
 							p.House = home
 						} else {
 							// далеко, -> подойди поближе к дому чтобы его построить
@@ -603,7 +653,7 @@ func (p *People) LifeCycle() {
 							if !ok {
 								log.Fatal("Это никогда не должно произойти")
 							}
-							curState = 10
+							p.State = 10
 						}
 					default:
 						goToObject(&BaseEntity{
@@ -612,11 +662,11 @@ func (p *People) LifeCycle() {
 						}, 0)
 					}
 				}
-			} else if curState == 10 {
+			} else if p.State == 10 {
 				select {
 				case m := <-p.Telegram:
 					if m.Head == KillPlant || m.Head == KillHAnimal || m.Head == KillPAnimal {
-						curState = 11
+						p.State = 11
 						p.Target.Telegram <- p.MessageWithSign(ImGoingAtHome, nil)
 					} else if m.Head == ImGoingAtHome || m.Head == IAmAtHome {
 						partnerAtHome = true
@@ -628,21 +678,21 @@ func (p *People) LifeCycle() {
 				default:
 					goToObject(p.nearest(7), 0.3)
 				}
-			} else if curState == 11 {
+			} else if p.State == 11 {
 				if dist(&p.BaseEntity, p.House.Locate(p.Gender)) < 5 {
-					curState = 12
+					p.State = 12
 					p.Target.Telegram <- p.MessageWithSign(IAmAtHome, nil)
 				} else {
 					goToObject(p.House.Locate(p.Gender), 0.1)
 				}
-			} else if curState == 12 {
+			} else if p.State == 12 {
 				select {
 				case m := <-p.Telegram:
 					if m.Head == IAmAtHome {
-						curState = 13
+						p.State = 13
 					}
 				}
-			} else if curState == 13 {
+			} else if p.State == 13 {
 				if p.Gender == Female {
 					p.House.CreateChild()
 				}
