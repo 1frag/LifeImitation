@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -284,63 +285,63 @@ func ServeDebug(w http.ResponseWriter, _ *http.Request) {
 	var data = make(map[int]map[string]string)
 	for i, o := range StoragePlants {
 		var about = make(map[string]string)
-		about["left"] = string(o.Left)
-		about["top"] = string(o.Top)
-		about["type"] = string(o.Type)
+		about["left"] = strconv.Itoa(o.Left)
+		about["top"] = strconv.Itoa(o.Top)
+		about["type"] = strconv.Itoa(o.Type)
 		data[i] = about
 	}
 	for i, o := range StorageHerbivoreAnimal {
 		var about = make(map[string]string)
-		about["left"] = string(o.Left)
-		about["top"] = string(o.Top)
-		about["hunger"] = string(o.Hunger)
+		about["left"] = strconv.Itoa(o.Left)
+		about["top"] = strconv.Itoa(o.Top)
+		about["hunger"] = strconv.Itoa(o.Hunger)
 		data[i] = about
 	}
 	for i, o := range StoragePredatoryAnimal {
 		var about = make(map[string]string)
-		about["left"] = string(o.Left)
-		about["top"] = string(o.Top)
-		about["hunger"] = string(o.Hunger)
+		about["left"] = strconv.Itoa(o.Left)
+		about["top"] = strconv.Itoa(o.Top)
+		about["hunger"] = strconv.Itoa(o.Hunger)
 		data[i] = about
 	}
 	for i, o := range StoragePeople {
 		var about = make(map[string]string)
-		about["left"] = string(o.Left)
-		about["top"] = string(o.Top)
-		about["hunger"] = string(o.Hunger)
+		about["left"] = strconv.Itoa(o.Left)
+		about["top"] = strconv.Itoa(o.Top)
+		about["hunger"] = strconv.Itoa(o.Hunger)
 		if o.Target == nil {
 			about["target"] = "__nil__"
 		} else {
-			about["target"] = string(o.Target.Id)
+			about["target"] = strconv.Itoa(o.Target.Id)
 		}
 		data[i] = about
 	}
 	for i, o := range StoragePeople {
 		var about = make(map[string]string)
-		about["left"] = string(o.Left)
-		about["top"] = string(o.Top)
-		about["hunger"] = string(o.Hunger)
+		about["left"] = strconv.Itoa(o.Left)
+		about["top"] = strconv.Itoa(o.Top)
+		about["hunger"] = strconv.Itoa(o.Hunger)
 		if o.Target == nil {
 			about["target"] = "__nil__"
 		} else {
-			about["target"] = string(o.Target.Id)
+			about["target"] = strconv.Itoa(o.Target.Id)
 		}
-		about["state"] = string(o.State)
+		about["state"] = strconv.Itoa(o.State)
 		data[i] = about
 	}
 	for i, o := range StorageHouses {
 		var about = make(map[string]string)
-		about["left"] = string(o.Left)
-		about["top"] = string(o.Top)
+		about["left"] = strconv.Itoa(o.Left)
+		about["top"] = strconv.Itoa(o.Top)
 		if o.Husband == nil {
 			about["Husband"] = "__nil__"
 		} else {
-			about["Husband"] = string(o.Husband.Id)
+			about["Husband"] = strconv.Itoa(o.Husband.Id)
 		}
 		if o.Wife == nil {
 			about["Wife"] = "__nil__"
 		} else {
-			about["Wife"] = string(o.Wife.Id)
+			about["Wife"] = strconv.Itoa(o.Wife.Id)
 		}
 		data[i] = about
 	}
@@ -668,7 +669,7 @@ func (p *People) LifeCycle() {
 					} else if m.Head == ImGoingAtHome || m.Head == IAmAtHome {
 						partnerAtHome = true
 					} else {
-						log.Printf("Unexpected this head=(%s), target.id=%d," +
+						log.Printf("Unexpected this head=(%s), target.id=%d,"+
 							" from.id=%d, pah=%t", m.Head, p.Target.Id,
 							m.From, partnerAtHome)
 					}
@@ -694,10 +695,11 @@ func (p *People) LifeCycle() {
 					p.House.CreateChild()
 				}
 				// конец второй части, todo: next
-				break
+				goto TheEnd
 			}
 		}
 	}
+TheEnd:
 	log.Printf("The end for person with id=%d", p.Id)
 }
 
@@ -771,11 +773,9 @@ func (p *People) MessageWithSign(header HeadTelegramMessage, body interface{}) T
 func approach(from int, to int, rightSide int) int {
 	if fv := func() int {
 		if from < to {
-			return randRange(0, rightSide)
-		} else if from == to {
-			return 0
+			return rightSide
 		} else {
-			return -randRange(0, rightSide)
+			return -rightSide
 		}
 	}(); absForInt(fv) < absForInt(from-to) {
 		return fv
