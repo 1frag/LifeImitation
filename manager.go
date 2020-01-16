@@ -64,12 +64,11 @@ func processMessage(r Request) {
 	case "init":
 		//go DrawMap(write) /*DrawMap*/
 	case "entity":
-		go GeneratePlants()          /*DrawPlant*/
-		go GenerateHerbivoreAnimal() /*GenerateHerbivoreAnimal*/
-		go GeneratePredatoryAnimal()
-		go GeneratePeoples()
+		go GeneratePlants()  /*DrawPlant*/
+		go GenerateAnimals() /*GenerateAnimals*/
+		go GeneratePeople()
 	case "info":
-		go GetInfoAbout(r.Id) /*InfoAbout*/
+		GetInfoAbout(r.Id) /*InfoAbout*/
 	}
 }
 
@@ -161,11 +160,7 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 			_ = LastClient.conn.Close()
 			close(LastClient.die)
 			globId = 0
-			StoragePlants = make(map[int]*Plant)
-			StorageHerbivoreAnimal = make(map[int]*HerbivoreAnimal)
-			StoragePredatoryAnimal = make(map[int]*PredatoryAnimal)
-			StorageHouses = make(map[int]*House)
-			StoragePeople = make(map[int]*People)
+			storage = NewStorage()
 		}()
 	}
 
@@ -173,9 +168,10 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	LastClient = client
 	go client.writePump()
 	go client.readPump()
+	go client.StarveInTheBackground()
 	go client.MovingManager()
-	go client.KillerManager()
-	go client.PopulatePlants()
+	go client.MeetingManager()
+	go client.Populate()
 
 }
 
