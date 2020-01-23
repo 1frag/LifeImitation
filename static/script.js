@@ -4,8 +4,6 @@ window.onload = function () {
     main = document.getElementById('main');
     root = document.documentElement;
 
-    prepareEnviroment();
-
     if (window["WebSocket"]) {
         let protocol = 'ws';
         if (document.location.host.substr(0, 2) !== '0.') {
@@ -26,18 +24,21 @@ window.onload = function () {
             _data = data;
             let res = ({
                 'DrawPeople': isDrawPeople,
-                'DrawMapCmd': ifDrawMap,
-                'DrawPlant': ifDrawPlant,
-                'DrawHerbivoreAnimal': isDrawHerbivoreAnimal,
-                'DrawPredatoryAnimal': isDrawPredatoryAnimal,
+                'DrawMapCmd': isDrawMap,
+                'DrawPlant': isDrawPlant,
+                'DrawAnimal': isDrawAnimal,
                 'InfoAbout': isInfoAbout,
                 'MoveMe': isMoveMe,
+                'MakeFence': isMakeFence,
                 'MustDie': isMustDie,
                 'DrawHouse': isDrawHouse,
                 'Bue': isBue,
             }[data['OnCmd']] || err_detect)(data);
 
             if (!res) {
+                failed[failed.length] = data;
+                console.log(res);
+                console.info(data);
                 console.error('Detected problem ' + Object.entries(data));
             }
         };
@@ -56,6 +57,25 @@ window.onload = function () {
 };
 
 let failed = [];
+
+function isMakeFence(data) {
+    let p1 = {
+        'Left': Math.min(data['Point1']['Left'], data['Point2']['Left']),
+        'Top': Math.min(data['Point1']['Top'], data['Point2']['Top']),
+    };
+    let p2 = {
+        'Left': Math.max(data['Point1']['Left'], data['Point2']['Left']),
+        'Top': Math.max(data['Point1']['Top'], data['Point2']['Top']),
+    };
+    let ent = document.createElement('div');
+    ent.className = 'fence';
+    main.insertBefore(ent, null);
+    ent.style.top = p1['Top'] + 'px';
+    ent.style.left = p1['Left'] + 'px';
+    ent.style.width = p2['Left'] - p1['Left'] + 'px';
+    ent.style.width = p2['Left'] - p1['Left'] + 'px';
+    return ent
+}
 
 function err_detect(data) {
     failed[failed.length] = data;
@@ -93,12 +113,6 @@ function isDrawPeople(data) {
     return true;
 }
 
-function prepareEnviroment() {
-    root.style.setProperty('--set-border-entity', '1px');
-    document.getElementById('turnBorderItem').checked = true;
-    document.getElementById('turnBorderItem').onchange = changeSetBorderEntity;
-}
-
 function changeSetBorderEntity() {
     root.style.setProperty('--set-border-entity', {
         '0px': '1px',
@@ -112,6 +126,7 @@ function isBue(data) {
 }
 
 function isMustDie(data) {
+    failed[failed.length] = data;
     let ent = document.getElementById('_go_' + data['Id']);
     if (ent === null) return false;
     $('#_go_' + data['Id']).fadeOut(1000, function () {
@@ -205,29 +220,35 @@ function isDrawPredatoryAnimal(data) {
     return true;
 }
 
-function isDrawHerbivoreAnimal(data) {
-    let halimal = addEntity(data);
-    addHealthCheck(halimal);
-    halimal.style.background = _url_('hanimal');
-    halimal.style['background-size'] = '100%';
+function isDrawAnimal(data) {
+    let animal = addEntity(data);
+    addHealthCheck(animal);
+    animal.style.background = _url_({
+        "Кролик": 'hanimal',
+        "Волк": 'panimal',
+        "Медведь": 'bear',
+        "Зебра": 'zebra',
+        "Лиса": 'fox',
+        "Слон": 'elephant',
+    }[data['Class']]);
+    animal.style['background-size'] = '100%';
+    animal.style['background-repeat'] = 'no-repeat';
     return true;
 }
 
-function ifDrawPlant(data) {
-    let plant = addEntity(data);
-    plant.style.background = {
-        0: _url_('plant_type1'),
-        1: _url_('plant_type2'),
-        2: _url_('plant_type3'),
-        3: _url_('plant_type4'),
-        4: _url_('plant_type5'),
-        5: _url_('plant_type6'),
-    }[data['Type']];
+function isDrawPlant(data) {
+    let plant = addEntity(data['Data']);
+    plant.style.background = _url_({
+        "Морковь": 'carrot',
+        "Капуста": 'cabbage',
+        "Кустарник": 'bush',
+    }[data['Data']['Kind']]);
     plant.style['background-size'] = '100%';
+    plant.style['background-repeat'] = 'no-repeat';
     return true;
 }
 
-function ifDrawMap(data) {
+function isDrawMap(data) {
     let indent_top = 0, indent_left = 0;
     let width_item = 10, height_item = 10;
     aw = data['Gap'].length * width_item - 30;

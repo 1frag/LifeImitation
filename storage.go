@@ -1,7 +1,13 @@
 package main
 
+import (
+	"fmt"
+	"sync"
+)
+
 type Storage struct {
-	ToType map[int]TypeEntity
+	lock     sync.RWMutex
+	ToType   map[int]TypeEntity
 
 	_rabbits   map[int]*Rabbit
 	_wolfs     map[int]*Wolf
@@ -18,53 +24,85 @@ type Storage struct {
 
 func NewStorage() (s *Storage) {
 	return &Storage{
-		ToType:   map[int]TypeEntity{},
-		_rabbits: map[int]*Rabbit{},
-		_wolfs:   map[int]*Wolf{},
+		lock:       sync.RWMutex{},
+		ToType:     map[int]TypeEntity{},
+		_rabbits:   map[int]*Rabbit{},
+		_wolfs:     map[int]*Wolf{},
+		_bears:     map[int]*Bear{},
+		_zebras:    map[int]*Zebra{},
+		_foxes:     map[int]*Fox{},
+		_people:    map[int]*Human{},
+		_houses:    map[int]*House{},
+		_cabbage:   map[int]*Cabbage{},
+		_bushes:    map[int]*Bush{},
+		_carrots:   map[int]*Carrot{},
+		_elephants: map[int]*Elephant{},
 	}
 }
 
 func (s *Storage) addRabbit(o *Rabbit) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Rabbit
 	s._rabbits[o.Id] = o
 }
 func (s *Storage) addWolf(o *Wolf) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Wolf
 	s._wolfs[o.Id] = o
 }
 func (s *Storage) addHuman(o *Human) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Human
 	s._people[o.Id] = o
 }
 func (s *Storage) addHouse(o *House) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _House
 	s._houses[o.Id] = o
 }
 func (s *Storage) addBear(o *Bear) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Bear
 	s._bears[o.Id] = o
 }
 func (s *Storage) addZebra(o *Zebra) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Zebra
 	s._zebras[o.Id] = o
 }
 func (s *Storage) addFox(o *Fox) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Fox
 	s._foxes[o.Id] = o
 }
 func (s *Storage) addCabbage(o *Cabbage) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Cabbage
 	s._cabbage[o.Id] = o
 }
 func (s *Storage) addBush(o *Bush) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Bush
 	s._bushes[o.Id] = o
 }
 func (s *Storage) addCarrot(o *Carrot) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Carrot
 	s._carrots[o.Id] = o
 }
 func (s *Storage) addElephant(o *Elephant) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Elephant
 	s._elephants[o.Id] = o
 }
@@ -130,33 +168,42 @@ type _BaseEntity struct {
 	die  chan bool
 }
 
+func (e *_BaseEntity) String() string {
+	return fmt.Sprintf("%s#%d", e.Kind.String(), e.Id)
+}
+
 type _BasePlant struct {
 	_BaseEntity
 }
 
-func (s *Storage) GetAnimalById(id int) *_BaseAnimal {
+func (s *Storage) GetAnimalById(id int) (cb func(), an *_BaseAnimal) {
+	s.lock.Lock()
+	cb = s.lock.Unlock
 	t, ok := s.ToType[id]
 	if !ok {
-		return nil
+		cb()
+		return nil, nil
 	}
 	switch t {
 	case _Rabbit:
-		return &s._rabbits[id]._BaseAnimal
+		an = &s._rabbits[id]._BaseAnimal
 	case _Bear:
-		return &s._bears[id]._BaseAnimal
+		an = &s._bears[id]._BaseAnimal
 	case _Elephant:
-		return &s._elephants[id]._BaseAnimal
+		an = &s._elephants[id]._BaseAnimal
 	case _Fox:
-		return &s._foxes[id]._BaseAnimal
+		an = &s._foxes[id]._BaseAnimal
 	case _Zebra:
-		return &s._zebras[id]._BaseAnimal
+		an = &s._zebras[id]._BaseAnimal
 	case _Wolf:
-		return &s._wolfs[id]._BaseAnimal
+		an = &s._wolfs[id]._BaseAnimal
 	}
-	return nil
+	return
 }
 
 func (s *Storage) GetPlantById(id int) *_BasePlant {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	t, ok := s.ToType[id]
 	if !ok {
 		return nil
@@ -173,6 +220,8 @@ func (s *Storage) GetPlantById(id int) *_BasePlant {
 }
 
 func (s *Storage) GetHumanById(id int) *Human {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	t, ok := s.ToType[id]
 	if !ok {
 		return nil
@@ -185,6 +234,8 @@ func (s *Storage) GetHumanById(id int) *Human {
 }
 
 func (s *Storage) GetHouseById(id int) *House {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	t, ok := s.ToType[id]
 	if !ok {
 		return nil
@@ -197,11 +248,15 @@ func (s *Storage) GetHouseById(id int) *House {
 }
 
 func (s *Storage) ExistId(id int) (ok bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	_, ok = s.ToType[id]
 	return
 }
 
 func (s *Storage) AllPlants() (m map[int]*_BasePlant) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	m = make(map[int]*_BasePlant)
 	for i, d := range s._carrots {
 		m[i] = &d._BasePlant
@@ -216,6 +271,8 @@ func (s *Storage) AllPlants() (m map[int]*_BasePlant) {
 }
 
 func (s *Storage) AllAnimal() (m map[int]*_BaseAnimal) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	m = make(map[int]*_BaseAnimal)
 	for i, d := range s._rabbits {
 		m[i] = &d._BaseAnimal
@@ -239,14 +296,20 @@ func (s *Storage) AllAnimal() (m map[int]*_BaseAnimal) {
 }
 
 func (s *Storage) AllPeople() (m map[int]*Human) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	return s._people
 }
 
 func (s *Storage) AllHouses() (m map[int]*House) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	return s._houses
 }
 
 func (s *Storage) AllBaseEntities() (m map[int]*_BaseEntity) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	m = map[int]*_BaseEntity{}
 	for i, d := range s._bushes {
 		m[i] = &d._BaseEntity
@@ -284,7 +347,11 @@ func (s *Storage) AllBaseEntities() (m map[int]*_BaseEntity) {
 	return
 }
 
-func (s *Storage) RemoveById(id int) {
+func (s *Storage) RemoveById(id int, blocking ... bool) {
+	if len(blocking) == 0 || blocking[0] {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+	}
 	// todo: fix this
 	delete(s.ToType, id)
 	delete(s._bushes, id)
@@ -307,6 +374,10 @@ func (t TypeEntity) in(l ...TypeEntity) bool {
 		}
 	}
 	return false
+}
+
+func (t TypeEntity) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("\"%s\"", t.String())), nil
 }
 
 type Gender string

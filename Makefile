@@ -1,5 +1,5 @@
 start:
-	go run *.go
+	go run controller.go manager.go server.go storage.go useful.go
 .ONESHELL:
 deploy:
 	echo "Message: ";

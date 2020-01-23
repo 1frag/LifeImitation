@@ -8,3 +8,13 @@ func IsClosed(ch <-chan bool) bool {
 		return false
 	}
 }
+
+type Helper struct {
+	AddRabbit           func(entity *_BaseEntity) int
+	AddZebra            func(entity *_BaseEntity) int
+	AddWolf             func(entity *_BaseEntity) int
+	AddBear             func(entity *_BaseEntity) int
+	AddFox              func(entity *_BaseEntity) int
+	AddElephant         func(entity *_BaseEntity) int
+	AdderAnimalInitiate bool
+}

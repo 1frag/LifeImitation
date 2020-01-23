@@ -64,11 +64,11 @@ func processMessage(r Request) {
 	case "init":
 		//go DrawMap(write) /*DrawMap*/
 	case "entity":
-		go GeneratePlants()  /*DrawPlant*/
-		go GenerateAnimals() /*GenerateAnimals*/
+		go GeneratePlants()
+		go GenerateAnimals()
 		go GeneratePeople()
 	case "info":
-		GetInfoAbout(r.Id) /*InfoAbout*/
+		GetInfoAbout(r.Id)
 	}
 }
 
@@ -125,8 +125,6 @@ func (c *Client) writePump() {
 		case <-c.die:
 			log.Print("writePump has been closed")
 			return
-		default:
-			continue
 		}
 	}
 }
@@ -150,17 +148,19 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		send: make(chan []byte),
 		lock: sync.RWMutex{},
 	}
+	storage = NewStorage()
 
 	if LastClient != nil {
 		func() {
 			log.Print("Last client has been killed")
 			LastClient.lock.Lock()
+			storage.lock.Lock()
 			defer LastClient.lock.Unlock()
+			defer storage.lock.Unlock()
 				_ = LastClient.conn.WriteMessage(websocket.TextMessage, BueMessage)
 			_ = LastClient.conn.Close()
 			close(LastClient.die)
 			globId = 0
-			storage = NewStorage()
 		}()
 	}
 
