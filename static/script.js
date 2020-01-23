@@ -1,6 +1,5 @@
 let conn, _data, main, root, aw, ah;
 window.onload = function () {
-    // todo: реализовать корректно закрытие вебсокета
     main = document.getElementById('main');
     root = document.documentElement;
 
@@ -11,7 +10,7 @@ window.onload = function () {
             protocol += 's'
         }
         conn = new WebSocket(protocol + '://' + document.location.host + "/ws");
-        conn.onclose = function (evt) {
+        conn.onclose = function (_) {
             console.warn('Connection closed.');
         };
         conn.onmessage = function (evt) {
@@ -28,6 +27,7 @@ window.onload = function () {
                 'DrawPlant': isDrawPlant,
                 'DrawAnimal': isDrawAnimal,
                 'InfoAbout': isInfoAbout,
+                'ChangeAge': isChangeAge,
                 'MoveMe': isMoveMe,
                 'MakeFence': isMakeFence,
                 'MustDie': isMustDie,
@@ -42,7 +42,7 @@ window.onload = function () {
                 console.error('Detected problem ' + Object.entries(data));
             }
         };
-        conn.onopen = function (evt) {
+        conn.onopen = function (_) {
             console.info('WebSocket has opened just');
             conn.send(JSON.stringify({'Cmd': 'entity'}));
             // conn.send(JSON.stringify({'Cmd': 'init', 'Id': -1}));
@@ -72,8 +72,20 @@ function isMakeFence(data) {
     main.insertBefore(ent, null);
     ent.style.top = p1['Top'] + 'px';
     ent.style.left = p1['Left'] + 'px';
-    ent.style.width = p2['Left'] - p1['Left'] + 'px';
-    ent.style.width = p2['Left'] - p1['Left'] + 'px';
+    let w = p2['Left'] - p1['Left'];
+    let h = p2['Top'] - p1['Top'];
+    if (w === 0) {
+        w = h;
+        h = 10;
+        ent.style.top = p1['Top'] + 40 + 'px';
+        ent.style.left = p1['Left'] - 40 + 'px';
+        ent.style.transform = 'rotate(90deg)';
+    } else {
+        h = 10;
+    }
+    ent.style.width = w + 'px';
+    ent.style.height = h + 'px';
+    ent.style.backgroundImage = _url_('fence');
     return ent
 }
 
@@ -85,39 +97,41 @@ function err_detect(data) {
 function isDrawHouse(data) {
     let house = addEntity(data);
     house.className += ' house';
-    house.style.background = _url_('house');
-    house.style['background-size'] = '100%';
+    house.style.backgroundImage = _url_('house');
+    house.style.backgroundSize = '100%';
+}
+
+function isChangeAge(data) {
+    let ent = document.getElementById('_go_' + data['Id']);
+    ent.style.backgroundImage = urlByAge(data['Age'], data['Gender']);
+    return true;
 }
 
 function _url_(of) {
     return 'url(/static/imgs/' + of + '.png)'
 }
 
-function isDrawPeople(data) {
-    let people = addEntity(data);
-    addHealthCheck(people);
-    let curl = '';
-    if (5 < data['Age'] && data['Age'] < 18 && data['Gender'] === 'Female') {
+function urlByAge(age, gender) {
+    let curl;
+    if (5 < age && age < 18 && gender === 'Female') {
         curl = _url_('girl')
-    } else if (5 < data['Age'] && data['Age'] < 18) {
+    } else if (5 < age && age < 18) {
         curl = _url_('boy')
-    } else if (data['Age'] >= 18 && data['Gender'] === 'Female') {
+    } else if (age >= 18 && gender === 'Female') {
         curl = _url_('woman')
-    } else if (data['Age'] >= 18) {
+    } else if (age >= 18) {
         curl = _url_('man')
     } else {
         curl = _url_('child')
     }
-    people.style.background = curl;
-    people.style['background-size'] = '100%';
-    return true;
+    return curl
 }
 
-function changeSetBorderEntity() {
-    root.style.setProperty('--set-border-entity', {
-        '0px': '1px',
-        '1px': '0px',
-    }[root.style.getPropertyValue('--set-border-entity')]);
+function isDrawPeople(data) {
+    let people = addEntity(data);
+    addHealthCheck(people);
+    people.style.backgroundImage = urlByAge(data['Age'], data['Gender']);
+    return true;
 }
 
 function isBue(data) {
@@ -155,35 +169,19 @@ function isMoveMe(data) {
         return 'maroon';
     }
 
-    // todo: поворачивать когда куда нить идёт
-
     let ent = document.getElementById('_go_' + data['IdObj']);
     if (ent === null) return false;
     ent.style.left = _('A', ent.style.left, data['ChangeX']);
     ent.style.top = _('A', ent.style.top, data['ChangeY']);
     let h = ent.getElementsByClassName('health-progress')[0];
     h.style.width = (100 - parseInt(data['Hunger'] * 100)) + '%';
-    h.style['background-color'] = chooseColor(data['Hunger']);
+    h.style.backgroundColor = chooseColor(data['Hunger']);
     return true;
 }
 
 function isInfoAbout(data) {
-    if (data['Class'] === 'Plant') {
-        alert('Это растение');
-        return true;
-    } else if (data['Class'] === 'HerbivoreAnimal') {
-        alert('Это травоядное животное.');
-        if (data['Target'])
-            alert('Он охотятится');
-        alert('Он голоден на ' + data['Hunger'] + 'из 100');
-        return true;
-    } else if (data['Class'] === 'PredatoryAnimal') {
-        alert('Это хищное животное.');
-        if (data['Target'])
-            alert('Он охотятится');
-        alert('Он голоден на ' + data['Hunger'] + 'из 100');
-        return true;
-    }
+    console.info(data);
+    return true
 }
 
 function addEntity(data) {
@@ -215,15 +213,14 @@ function addHealthCheck(p) {
 function isDrawPredatoryAnimal(data) {
     let halimal = addEntity(data);
     addHealthCheck(halimal);
-    halimal.style.background = _url_('panimal');
-    halimal.style['background-size'] = '100%';
+    halimal.style.backgroundImage = _url_('panimal');
     return true;
 }
 
 function isDrawAnimal(data) {
     let animal = addEntity(data);
     addHealthCheck(animal);
-    animal.style.background = _url_({
+    animal.style.backgroundImage = _url_({
         "Кролик": 'hanimal',
         "Волк": 'panimal',
         "Медведь": 'bear',
@@ -231,20 +228,16 @@ function isDrawAnimal(data) {
         "Лиса": 'fox',
         "Слон": 'elephant',
     }[data['Class']]);
-    animal.style['background-size'] = '100%';
-    animal.style['background-repeat'] = 'no-repeat';
     return true;
 }
 
 function isDrawPlant(data) {
     let plant = addEntity(data['Data']);
-    plant.style.background = _url_({
+    plant.style.backgroundImage = _url_({
         "Морковь": 'carrot',
         "Капуста": 'cabbage',
         "Кустарник": 'bush',
     }[data['Data']['Kind']]);
-    plant.style['background-size'] = '100%';
-    plant.style['background-repeat'] = 'no-repeat';
     return true;
 }
 
@@ -258,7 +251,7 @@ function isDrawMap(data) {
         for (let j = 0; j < data['Gap'][i].length; j++) {
             let e = document.createElement('div');
             e.className = 'item';
-            e.style.background = {
+            e.style.backgroundColor = {
                 0: '#f0db7d', /*песок*/
                 1: '#a2653e', /*земля*/
                 2: '#3f9b0b', /*трава*/

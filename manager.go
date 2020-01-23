@@ -47,7 +47,6 @@ func (c *Client) readPump() {
 		if message == nil {
 			continue
 		}
-		log.Print(message)
 		c.send <- message
 		select {
 		case <-c.die:
@@ -59,7 +58,7 @@ func (c *Client) readPump() {
 	}
 }
 
-func processMessage(r Request) {
+func ProcessMessage(r ClientMessage) {
 	switch r.Cmd {
 	case "init":
 		//go DrawMap(write) /*DrawMap*/
@@ -72,7 +71,7 @@ func processMessage(r Request) {
 	}
 }
 
-type Request struct {
+type ClientMessage struct {
 	Cmd string
 	Id  int
 }
@@ -83,7 +82,9 @@ func write(bytes []byte) {
 	w, err := LastClient.conn.NextWriter(websocket.TextMessage)
 	if err != nil {
 		log.Printf("Не удалось получить writer: %q", err)
-		LastClient.die <-true
+		if !IsClosed(LastClient.die) {
+			LastClient.die <-true
+		}
 		return
 	}
 	_, err = w.Write(bytes)
@@ -96,7 +97,7 @@ func write(bytes []byte) {
 	}
 }
 
-func writeJSON(i interface{}) {
+func WriteJSON(i interface{}) {
 	d, err := json.Marshal(i)
 	if err != nil {
 		log.Print(err)
@@ -106,24 +107,23 @@ func writeJSON(i interface{}) {
 }
 
 func (c *Client) writePump() {
+	reason := ""
+	defer log.Printf("writePump has been closed (reason=%s)", reason)
 	for {
 		select {
-		case message, ok := <-c.send:
-			if !ok {
-				return
-			}
-
-			r := Request{}
+		case message := <-c.send:
+			r := ClientMessage{}
 			err := json.Unmarshal(message, &r)
 
 			if err != nil {
 				log.Printf("С клиента пришла какая то ерунда, %q", err)
+				reason = "err != nil"
 				return
 			}
-
-			processMessage(r)
+			log.Printf("{Id: %d, Cmd: %s}", r.Id, r.Cmd)
+			ProcessMessage(r)
 		case <-c.die:
-			log.Print("writePump has been closed")
+			reason = "c.die"
 			return
 		}
 	}

@@ -6,8 +6,8 @@ import (
 )
 
 type Storage struct {
-	lock     sync.RWMutex
-	ToType   map[int]TypeEntity
+	lock   sync.RWMutex
+	ToType map[int]TypeEntity
 
 	_rabbits   map[int]*Rabbit
 	_wolfs     map[int]*Wolf
@@ -20,6 +20,8 @@ type Storage struct {
 	_bushes    map[int]*Bush
 	_carrots   map[int]*Carrot
 	_elephants map[int]*Elephant
+	_farms     map[int]*Farm
+	_fences    map[int]*Fence
 }
 
 func NewStorage() (s *Storage) {
@@ -37,74 +39,88 @@ func NewStorage() (s *Storage) {
 		_bushes:    map[int]*Bush{},
 		_carrots:   map[int]*Carrot{},
 		_elephants: map[int]*Elephant{},
+		_farms:     map[int]*Farm{},
+		_fences:    map[int]*Fence{},
 	}
 }
 
-func (s *Storage) addRabbit(o *Rabbit) {
+func (s *Storage) AddRabbit(o *Rabbit) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Rabbit
 	s._rabbits[o.Id] = o
 }
-func (s *Storage) addWolf(o *Wolf) {
+func (s *Storage) AddWolf(o *Wolf) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Wolf
 	s._wolfs[o.Id] = o
 }
-func (s *Storage) addHuman(o *Human) {
+func (s *Storage) AddHuman(o *Human) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Human
 	s._people[o.Id] = o
 }
-func (s *Storage) addHouse(o *House) {
+func (s *Storage) AddHouse(o *House) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _House
 	s._houses[o.Id] = o
 }
-func (s *Storage) addBear(o *Bear) {
+func (s *Storage) AddBear(o *Bear) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Bear
 	s._bears[o.Id] = o
 }
-func (s *Storage) addZebra(o *Zebra) {
+func (s *Storage) AddZebra(o *Zebra) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Zebra
 	s._zebras[o.Id] = o
 }
-func (s *Storage) addFox(o *Fox) {
+func (s *Storage) AddFox(o *Fox) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Fox
 	s._foxes[o.Id] = o
 }
-func (s *Storage) addCabbage(o *Cabbage) {
+func (s *Storage) AddCabbage(o *Cabbage) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Cabbage
 	s._cabbage[o.Id] = o
 }
-func (s *Storage) addBush(o *Bush) {
+func (s *Storage) AddBush(o *Bush) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Bush
 	s._bushes[o.Id] = o
 }
-func (s *Storage) addCarrot(o *Carrot) {
+func (s *Storage) AddCarrot(o *Carrot) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Carrot
 	s._carrots[o.Id] = o
 }
-func (s *Storage) addElephant(o *Elephant) {
+func (s *Storage) AddElephant(o *Elephant) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.ToType[o.Id] = _Elephant
 	s._elephants[o.Id] = o
+}
+func (s *Storage) AddFarm(o *Farm) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.ToType[o.Id] = _Farm
+	s._farms[o.Id] = o
+}
+func (s *Storage) AddFence(o *Fence) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.ToType[o.Id] = _Fence
+	s._fences[o.Id] = o
 }
 
 type TypeEntity int
@@ -121,12 +137,14 @@ const (
 	_Bush
 	_Carrot
 	_Elephant
+	_Fence
+	_Farm
 )
 
 func (t TypeEntity) String() string {
 	return [...]string{"Кролик", "Волк", "Человек", "Дом",
 		"Медведь", "Зебра", "Лиса", "Капуста", "Кустарник",
-		"Морковь", "Слон"}[t]
+		"Морковь", "Слон", "Забор", "Ферма"}[t]
 }
 
 type Cabbage struct{ _BasePlant }
@@ -152,6 +170,20 @@ type Human struct {
 	SocialStatus SocialStatus
 	Telegram     chan TelegramMessage
 	House        *House
+	Farm         *Farm
+}
+type Point struct {
+	Left int
+	Top  int
+}
+type Fence struct {
+	Id    int
+	begin Point
+	end   Point
+}
+type Farm struct {
+	_BaseEntity
+	fencing []*Fence
 }
 
 type _BaseAnimal struct {
@@ -176,6 +208,19 @@ type _BasePlant struct {
 	_BaseEntity
 }
 
+func (s *Storage) GetTypeById(id int) (t TypeEntity, b bool) {
+	t, b = s.ToType[id]
+	return
+}
+
+func (s *Storage) Lock() {
+	s.lock.Lock()
+}
+
+func (s *Storage) Unlock() {
+	s.lock.Unlock()
+}
+
 func (s *Storage) GetAnimalById(id int) (cb func(), an *_BaseAnimal) {
 	s.lock.Lock()
 	cb = s.lock.Unlock
@@ -197,6 +242,9 @@ func (s *Storage) GetAnimalById(id int) (cb func(), an *_BaseAnimal) {
 		an = &s._zebras[id]._BaseAnimal
 	case _Wolf:
 		an = &s._wolfs[id]._BaseAnimal
+	}
+	if an == nil {
+		cb()
 	}
 	return
 }
@@ -307,9 +355,12 @@ func (s *Storage) AllHouses() (m map[int]*House) {
 	return s._houses
 }
 
-func (s *Storage) AllBaseEntities() (m map[int]*_BaseEntity) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+func (s *Storage) AllBaseEntities(conf ...bool) (m map[int]*_BaseEntity) {
+	if len(conf) != 1 || !conf[0] {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+	}
+
 	m = map[int]*_BaseEntity{}
 	for i, d := range s._bushes {
 		m[i] = &d._BaseEntity
@@ -344,10 +395,13 @@ func (s *Storage) AllBaseEntities() (m map[int]*_BaseEntity) {
 	for i, d := range s._rabbits {
 		m[i] = &d._BaseEntity
 	}
+	for i, d := range s._farms {
+		m[i] = &d._BaseEntity
+	}
 	return
 }
 
-func (s *Storage) RemoveById(id int, blocking ... bool) {
+func (s *Storage) RemoveById(id int, blocking ...bool) {
 	if len(blocking) == 0 || blocking[0] {
 		s.lock.Lock()
 		defer s.lock.Unlock()
@@ -367,7 +421,27 @@ func (s *Storage) RemoveById(id int, blocking ... bool) {
 	delete(s._rabbits, id)
 }
 
+func (t TypeEntity) GetTarget() []TypeEntity {
+	return map[TypeEntity][]TypeEntity{
+		_Zebra:    {_Bush},
+		_Rabbit:   {_Carrot, _Cabbage},
+		_Elephant: {_Bush},
+		_Fox:      {_Rabbit},
+		_Wolf:     {_Rabbit, _Fox},
+		_Bear:     {_Rabbit, _Fox, _Wolf, _Zebra},
+		_Human:    {_Rabbit, _Wolf, _Cabbage, _Carrot},
+	}[t]
+}
+
+func (t TypeEntity) isAnimal() bool {
+	return t.in(_Zebra, _Wolf, _Bear, _Fox, _Rabbit, _Elephant)
+}
+
 func (t TypeEntity) in(l ...TypeEntity) bool {
+	return t.inLst(l)
+}
+
+func (t TypeEntity) inLst(l []TypeEntity) bool {
 	for _, e := range l {
 		if e == t {
 			return true

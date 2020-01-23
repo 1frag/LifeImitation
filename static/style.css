@@ -1,5 +1,5 @@
 html {
-    overflow: hidden;
+    overflow: auto;
 }
 
 :root {
@@ -46,8 +46,8 @@ html {
     width: 30px;
     position: absolute;
     background-size: 100%;
-    transition-duration: 1500ms;
     background-repeat: no-repeat;
+    transition-duration: 1500ms;
 }
 
 .house {
@@ -55,12 +55,15 @@ html {
     width: 80px;
     z-index: -2;
     opacity: 0.6;
+    background-size: 100%;
+    background-repeat: no-repeat;
 }
 
 .fence {
-    background-color: black;
     opacity: 0.7;
     position: absolute;
+    background-size: contain;
+    background-repeat: repeat;
 }
 
 body {
