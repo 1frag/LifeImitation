@@ -1,1 +1,1 @@
-web: ./service
+web: ./LifeImitation
