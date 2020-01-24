@@ -31,7 +31,7 @@ type Client struct {
 	die  chan bool
 }
 
-func (c *Client) readPump() {
+func (c *Client) ReadPump() {
 	c.conn.SetPongHandler(func(string) error {
 		_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
@@ -50,7 +50,7 @@ func (c *Client) readPump() {
 		c.send <- message
 		select {
 		case <-c.die:
-			log.Print("readPump has been closed")
+			log.Print("ReadPump has been closed")
 			return
 		default:
 			continue
@@ -63,9 +63,9 @@ func ProcessMessage(r ClientMessage) {
 	case "init":
 		//go DrawMap(write) /*DrawMap*/
 	case "entity":
-		go GeneratePlants()
-		go GenerateAnimals()
-		go GeneratePeople()
+		GeneratePeople()
+		GeneratePlants()
+		GenerateAnimals()
 	case "info":
 		GetInfoAbout(r.Id)
 	}
@@ -83,7 +83,7 @@ func write(bytes []byte) {
 	if err != nil {
 		log.Printf("Не удалось получить writer: %q", err)
 		if !IsClosed(LastClient.die) {
-			LastClient.die <-true
+			LastClient.die <- true
 		}
 		return
 	}
@@ -106,9 +106,9 @@ func WriteJSON(i interface{}) {
 	write(d)
 }
 
-func (c *Client) writePump() {
+func (c *Client) WritePump() {
 	reason := ""
-	defer log.Printf("writePump has been closed (reason=%s)", reason)
+	defer log.Printf("WritePump has been closed (reason=%s)", reason)
 	for {
 		select {
 		case message := <-c.send:
@@ -157,7 +157,7 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 			storage.lock.Lock()
 			defer LastClient.lock.Unlock()
 			defer storage.lock.Unlock()
-				_ = LastClient.conn.WriteMessage(websocket.TextMessage, BueMessage)
+			_ = LastClient.conn.WriteMessage(websocket.TextMessage, BueMessage)
 			_ = LastClient.conn.Close()
 			close(LastClient.die)
 			globId = 0
@@ -166,12 +166,13 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 
 	log.Print("Start new game")
 	LastClient = client
-	go client.writePump()
-	go client.readPump()
-	go client.StarveInTheBackground()
-	go client.MovingManager()
-	go client.MeetingManager()
-	go client.Populate()
+	go client.WritePump()              // реагирует на сообщения клиента
+	go client.ReadPump()               // читает сообщения клиента
+	go client.StarveInTheBackground()  // совершает голодание живых сущностей
+	go client.MovingManager()          // управляет движением простейших животных
+	go client.MeetingManager()         // реализует логику встречи объектов
+	go client.Populate()               // популизация вымирающих видов
+	go client.FateDistributionSystem() // Распределяет людей по парам
 
 }
 

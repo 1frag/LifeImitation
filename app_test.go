@@ -1,18 +1,25 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestApp(t *testing.T) {
-	left, top := CityBuilder(&_BaseEntity{
-		Top:  91,
-		Left: 76,
-		die:  nil,
+	ch := make(chan int, 2)
+	time.AfterFunc(5 * time.Second, func() {
+		t.Log("d")
+		ch <- 2
+		t.Log("e")
 	})
-	t.Log(left, top)
-	left, top = CityBuilder(&_BaseEntity{
-		Top:  160,
-		Left: 160,
-		die:  nil,
-	})
-	t.Log(left, top)
+	for {
+		select {
+		case <- ch:
+			t.Log("a")
+			break
+		}
+		t.Log("b")
+		break
+	}
+	t.Log("c")
 }

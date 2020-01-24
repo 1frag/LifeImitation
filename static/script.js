@@ -1,4 +1,5 @@
 let conn, _data, main, root, aw, ah;
+let history_ = [];
 window.onload = function () {
     main = document.getElementById('main');
     root = document.documentElement;
@@ -21,12 +22,14 @@ window.onload = function () {
             }
             let data = JSON.parse(evt.data);
             _data = data;
+            history_[history_.length] = data;
             let res = ({
                 'DrawPeople': isDrawPeople,
                 'DrawMapCmd': isDrawMap,
                 'DrawPlant': isDrawPlant,
                 'DrawAnimal': isDrawAnimal,
                 'InfoAbout': isInfoAbout,
+                'PositionChanged': isPositionChanged,
                 'ChangeAge': isChangeAge,
                 'MoveMe': isMoveMe,
                 'MakeFence': isMakeFence,
@@ -57,6 +60,14 @@ window.onload = function () {
 };
 
 let failed = [];
+
+function isPositionChanged(data) {
+    for (let i = 0; i < data.length; i++) {
+        let ent = document.getElementById('_go_' + data['Id']);
+        ent.style.left = ent.offsetLeft + data['Dx'] + 'px';
+        ent.style.top = ent.offsetTop + data['Dy'] + 'px';
+    }
+}
 
 function isMakeFence(data) {
     let p1 = {
@@ -99,6 +110,7 @@ function isDrawHouse(data) {
     house.className += ' house';
     house.style.backgroundImage = _url_('house');
     house.style.backgroundSize = '100%';
+    return true;
 }
 
 function isChangeAge(data) {
@@ -140,7 +152,6 @@ function isBue(data) {
 }
 
 function isMustDie(data) {
-    failed[failed.length] = data;
     let ent = document.getElementById('_go_' + data['Id']);
     if (ent === null) return false;
     $('#_go_' + data['Id']).fadeOut(1000, function () {
@@ -173,9 +184,11 @@ function isMoveMe(data) {
     if (ent === null) return false;
     ent.style.left = _('A', ent.style.left, data['ChangeX']);
     ent.style.top = _('A', ent.style.top, data['ChangeY']);
-    let h = ent.getElementsByClassName('health-progress')[0];
-    h.style.width = (100 - parseInt(data['Hunger'] * 100)) + '%';
-    h.style.backgroundColor = chooseColor(data['Hunger']);
+    if (data['Hunger'] !== null) {
+        let h = ent.getElementsByClassName('health-progress')[0];
+        h.style.width = (100 - parseInt(data['Hunger'] * 100)) + '%';
+        h.style.backgroundColor = chooseColor(data['Hunger']);
+    }
     return true;
 }
 
@@ -210,16 +223,10 @@ function addHealthCheck(p) {
     health.insertBefore(progress, null);
 }
 
-function isDrawPredatoryAnimal(data) {
-    let halimal = addEntity(data);
-    addHealthCheck(halimal);
-    halimal.style.backgroundImage = _url_('panimal');
-    return true;
-}
-
 function isDrawAnimal(data) {
     let animal = addEntity(data);
     addHealthCheck(animal);
+    // noinspection NonAsciiCharacters
     animal.style.backgroundImage = _url_({
         "Кролик": 'hanimal',
         "Волк": 'panimal',
@@ -233,6 +240,7 @@ function isDrawAnimal(data) {
 
 function isDrawPlant(data) {
     let plant = addEntity(data['Data']);
+    // noinspection NonAsciiCharacters
     plant.style.backgroundImage = _url_({
         "Морковь": 'carrot',
         "Капуста": 'cabbage',

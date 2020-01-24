@@ -16,5 +16,8 @@ type Helper struct {
 	AddBear             func(entity *_BaseEntity) int
 	AddFox              func(entity *_BaseEntity) int
 	AddElephant         func(entity *_BaseEntity) int
+	AddCarrot           func(entity *_BaseEntity) int
+	AddCabbage          func(entity *_BaseEntity) int
+	AddBush             func(entity *_BaseEntity) int
 	AdderAnimalInitiate bool
 }
