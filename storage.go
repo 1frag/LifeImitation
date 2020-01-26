@@ -9,7 +9,7 @@ type Conf string
 
 const (
 	NoWait Conf = "NoWait"
-	Wait Conf = "Wait"
+	Wait   Conf = "Wait"
 )
 
 type Storage struct {
@@ -204,6 +204,7 @@ type Human struct {
 	House        *House
 	Farm         *Farm
 	Pets         []*Pet
+	Warehouse    *_BaseEntity
 }
 type Point struct {
 	Left int
@@ -234,7 +235,7 @@ type _BaseEntity struct {
 }
 
 type Pet struct {
-	entity  *_BaseEntity
+	entity *_BaseEntity
 }
 
 func (e *_BaseEntity) String() string {
@@ -500,6 +501,7 @@ func (f *Fence) String() string {
 }
 
 type Gender string
+
 func (g Gender) String() string {
 	if g == Male {
 		return "Male"

@@ -240,6 +240,11 @@ func ServeDebug(w http.ResponseWriter, _ *http.Request) {
 		about["type"] = o.Kind.String()
 		about["state"] = strconv.Itoa(o.State)
 		about["gender"] = o.Gender.String()
+		petsStr := ""
+		for _, o := range o.Pets {
+			petsStr = fmt.Sprintf("%s, %d", petsStr, o.entity.Id)
+		}
+		about["petsIds"] = petsStr
 		if o.Target == nil {
 			about["target"] = "__nil__"
 		} else {
@@ -445,7 +450,7 @@ func addPeople(g Gender, a int) {
 		Age:      a,
 		State:    0,
 		Gender:   g,
-		Telegram: make(chan TelegramMessage, 20),
+		Telegram: make(chan TelegramMessage, 200),
 		Pets:     []*Pet{},
 	}
 	WriteJSON(p.asCmdCreate())
@@ -466,7 +471,7 @@ func (p *_BaseAnimal) GoToObject(target *_BaseEntity, hunger float64) {
 func (p *Human) LifeCycle() {
 	ticker := time.NewTicker(LifeCyclePeriod)
 	p.SocialStatus = Child
-	p.State = 7 // 7 - debug version [set 0 for long production version]
+	p.State = 0 // 7 - debug version [set 0 for long production version]
 	var home *House = nil
 	var partnerAtHome = false
 	var flag = true
@@ -677,22 +682,107 @@ func (p *Human) LifeCycle() {
 				// мужчина за скотом / женщина за овощами
 				if p.Gender == Male {
 					if len(p.Pets) < 2 {
-						log.Printf("%s sd", p.String())
 						p.StompZebra()
-						log.Printf("%s adoiashdj", p.String())
 					} else {
 						p.Target.Take(p.MessageWithSign(PetsHasBeenPrepared, nil))
 						p.State = 15
 					}
 				} else {
-					log.Printf("%s", p.String())
+					log.Printf("%s пошла за травой", p.String())
 					p.StompPlant()
 				}
+			} else if p.State == 15 {
+				p.BuildWarehouse()
+				p.State = 16
+			} else if p.State == 16 {
+				newpet := GenerateBaseEntity(_Zebra,
+					(p.Pets[0].entity.Left+p.Pets[1].entity.Left)/2,
+					(p.Pets[0].entity.Top+p.Pets[1].entity.Top)/2)
+				p.TakeNewPet(newpet)
 			}
 		}
 	}
 
 	log.Printf("The end for person with id=%d", p.Id)
+}
+
+func (p *Human) TakeNewPet(np *_BaseEntity) {
+	timer := time.NewTicker(LifeCyclePeriod)
+	for {
+		select {
+		case <-timer.C:
+			p.GoToObject(np, 0.2)
+			if p.Left == np.Left && p.Top == np.Top {
+				break
+			}
+		}
+		if p.Left == np.Left && p.Top == np.Top {
+			break
+		}
+	}
+	tar := &_BaseEntity{
+		Top:  p.Warehouse.Top,
+		Left: p.Warehouse.Left - HouseWidth,
+	}
+	for {
+		select {
+		case <-timer.C:
+			p.GoToObject(tar, 0.2)
+			WriteJSON(PositionChangesMessage{
+				OnCmd: PositionChanged,
+				Data: []PositionChangesItem{
+					{
+						IdObj: np.Id,
+						Dx:    p.Left - EntityWidth - np.Left,
+						Dy:    p.Top - np.Top,
+					},
+				},
+			})
+			np.Left = p.Left - EntityWidth
+			np.Top = p.Top
+			if p.Left == tar.Left && p.Top == tar.Top {
+				break
+			}
+		}
+		if p.Left == np.Left && p.Top == np.Top {
+			break
+		}
+	}
+	WriteJSON(MustDieEntity{
+		OnCmd:  MustDie,
+		Id:     np.Id,
+		Reason: Eaten,
+	})
+}
+
+func (p *Human) BuildWarehouse() {
+	timer := time.NewTicker(LifeCyclePeriod)
+	l, t := CityBuilder(&p.House._BaseEntity)
+	wh := &_BaseEntity{
+		Top:  t,
+		Left: l,
+	}
+	for {
+		select {
+		case <-timer.C:
+			p.GoToObject(wh, 0.2)
+			if p.Left == l && p.Top == t {
+				break
+			}
+		}
+		if p.Left == l && p.Top == t {
+			break
+		}
+	}
+	WriteJSON(struct {
+		OnCmd Command
+		Left  int
+		Top   int
+	}{
+		MakeWarehouse,
+		l, t,
+	})
+	p.Warehouse = wh
 }
 
 func (p *Human) StompPlant() {
@@ -707,6 +797,7 @@ func (p *Human) StompPlant() {
 		storage.Unlock()
 		return
 	}
+	amdx, amdy := rand.Intn(2*EntityWidth), rand.Intn(EntityHeight)
 	storage.RemoveById(bush.Id, NoWait)
 	storage.Unlock()
 	for {
@@ -720,8 +811,8 @@ func (p *Human) StompPlant() {
 				}
 			} else {
 				p.GoToObject(&_BaseEntity{
-					Left: p.Farm.Left + HouseWidth - EntityWidth,
-					Top:  p.Farm.Top + HouseHeight - EntityHeight,
+					Left: p.Farm.Left + HouseWidth - EntityWidth - amdx,
+					Top:  p.Farm.Top + HouseHeight - EntityHeight - amdy,
 				}, 0.3)
 				WriteJSON(struct {
 					OnCmd   Command
@@ -738,12 +829,41 @@ func (p *Human) StompPlant() {
 				bush.Top = p.Top
 			}
 			storage.Unlock()
-			if p.Left == p.Farm.Left+HouseWidth-EntityWidth &&
-				p.Top == p.Farm.Top+HouseHeight-EntityHeight {
-				return
+			if p.Left == p.Farm.Left+HouseWidth-EntityWidth-amdx &&
+				p.Top == p.Farm.Top+HouseHeight-EntityHeight-amdy {
+				if len(p.Target.Pets) != 0 {
+					pet := p.Target.Pets[rand.Intn(len(p.Target.Pets))]
+					go EatAndReturn(pet.entity,
+						p.Farm.Left+HouseWidth-EntityWidth-amdx,
+						p.Farm.Top+HouseHeight-EntityHeight-amdy,
+						bush.Id)
+					return
+				}
 			}
 		}
 	}
+}
+
+func EatAndReturn(who *_BaseEntity, i, j, eid int) {
+	oldi, oldj := who.Left, who.Top
+	helper := func(ii, jj int) {
+		WriteJSON(PositionChangesMessage{
+			OnCmd: PositionChanged,
+			Data: []PositionChangesItem{
+				{IdObj: who.Id, Dx: ii, Dy: jj},
+			},
+		})
+	}
+	helper((i-oldi)/2, (j-oldj)/2)
+	helper((i-oldi)/2, (j-oldj)/2)
+	WriteJSON(MustDieEntity{
+		OnCmd:  MustDie,
+		Id:     eid,
+		Reason: Eaten,
+	})
+	helper((oldi-i)/2, (oldj-j)/2)
+	helper((oldi-i)/2, (oldj-j)/2)
+
 }
 
 func (p *Human) StompZebra() {
@@ -800,16 +920,13 @@ func (p *Human) StompZebra() {
 				}, 0.3)
 				zebra.GoToObject(&p._BaseEntity,
 					float64(zebra.Hunger)/MaxPointLiveHunger)
-				if p.Top == p.Farm.Top && p.Left == p.Farm.Left-EntityWidth {
-					//go PetLife(&zebra._BaseEntity, p)
+				if p.Top == p.Farm.Top && p.Left == p.Farm.Left+EntityWidth*len(p.Pets) {
+
+					zebra.SendMoveMe(p.Farm.Left+len(p.Pets)*EntityWidth-zebra.Left,
+						p.Farm.Top-zebra.Top, float64(zebra.Hunger)/MaxPointLiveHunger)
+					zebra.Left = p.Farm.Left + len(p.Pets)*EntityWidth
+					zebra.Top = p.Farm.Top
 					p.Pets = append(p.Pets, &Pet{&zebra._BaseEntity})
-					for range []int{1, 2, 3, 4, 5} {
-						zebra.GoToObject(&_BaseEntity{
-							Left: p.Farm.Left + len(p.Pets)*EntityWidth,
-							Top:  p.Farm.Top,
-						},
-							float64(zebra.Hunger)/MaxPointLiveHunger)
-					}
 					storage.Unlock()
 					return
 				}
@@ -984,7 +1101,7 @@ func (h *House) CreateChild() {
 		Target:       nil,
 		Gender:       GetNextGender(),
 		SocialStatus: Child,
-		Telegram:     make(chan TelegramMessage, 20),
+		Telegram:     make(chan TelegramMessage, 200),
 		House:        h,
 		Pets:         []*Pet{},
 	}
@@ -1144,6 +1261,7 @@ func (c *Client) MovingManager() {
 		select {
 		case <-ticker.C:
 			for id := range all {
+				//SendNewPosition
 				cb, o := storage.GetAnimalById(id)
 				if o == nil {
 					delete(all, id)
@@ -1511,6 +1629,7 @@ const (
 	MakeFence       Command = "MakeFence"
 	ChangeAge       Command = "ChangeAge"
 	PositionChanged Command = "PositionChanged"
+	MakeWarehouse   Command = "MakeWarehouse"
 
 	KillFood            HeadTelegramMessage = "Покушал"
 	GoToState9          HeadTelegramMessage = "GoToState9"

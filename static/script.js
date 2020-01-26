@@ -31,6 +31,7 @@ window.onload = function () {
                 'InfoAbout': isInfoAbout,
                 'PositionChanged': isPositionChanged,
                 'ChangeAge': isChangeAge,
+                'MakeWarehouse': isMakeWarehouse,
                 'MoveMe': isMoveMe,
                 'MakeFence': isMakeFence,
                 'MustDie': isMustDie,
@@ -61,12 +62,20 @@ window.onload = function () {
 
 let failed = [];
 
+function isMakeWarehouse(data) {
+    let warehouse = addEntity(data);
+    warehouse.className += ' house';
+    warehouse.style.backgroundImage = _url_('saray');
+    return true;
+}
+
 function isPositionChanged(data) {
     for (let i = 0; i < data.length; i++) {
         let ent = document.getElementById('_go_' + data['Id']);
         ent.style.left = ent.offsetLeft + data['Dx'] + 'px';
         ent.style.top = ent.offsetTop + data['Dy'] + 'px';
     }
+    return true;
 }
 
 function isMakeFence(data) {
@@ -109,7 +118,6 @@ function isDrawHouse(data) {
     let house = addEntity(data);
     house.className += ' house';
     house.style.backgroundImage = _url_('house');
-    house.style.backgroundSize = '100%';
     return true;
 }
 
